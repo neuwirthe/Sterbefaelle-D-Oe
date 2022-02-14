@@ -3,5 +3,6 @@
 .RData
 .Ruserdata
 data/*
+!data/pop_deaths_aut_ger_agegroup_weekly.RData
 *.html
 *.pdf
