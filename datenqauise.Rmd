@@ -1,0 +1,577 @@
+---
+title: "Datenaquise Sterbefallanslyse Östereich - Deutschland"
+author: "Erich Neuwirth"
+date: "2/14/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r local_setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, 
+                      warning = FALSE, comment = NULL)
+options(scipen = 999)
+options(OutDec = ",")
+options(decimal.mark = ",")
+```
+
+
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(magrittr)
+  library(fs)
+  library(here)
+  library(ggiraph)
+  library(scales)
+  library(gt)
+  library(ggmosaic)
+  library(htmlwidgets)
+  library(rtweet)  
+  library(RColorBrewer)
+  library(readxl)
+  library(curl)
+}
+)
+```
+
+
+```{r}
+raw_data_path <-
+  path(here(),"data")
+```
+
+
+
+```{r}
+# Jahre mit 53 Wochen
+# 2004 2009 2015 2020
+```
+
+
+
+# Bevölkerungsdaten
+
+## Österreich 
+
+### Gemeinden Bevölkerung jährlih
+
+Gliederung:
+  - Jahre 2002-2022 (Stand 1. Jänner)
+  - Gemeinde
+  - Alter
+
+zu finden bei https://data.statistik.gv.at/web/catalog.jsp#collapse7
+
+
+#### Download
+
+```{r}
+2002:2021 |>
+  map(
+  \(i)suppressMessages(
+    read_csv2(
+      paste0(
+      "https://data.statistik.gv.at/data/OGD_bevstandjbab2002_BevStand_",
+      i,
+      ".csv")))
+  ) |> 
+  reduce(bind_rows) ->
+    tmp_df
+
+tmp_df |>
+  mutate(Jahr=str_sub(`C-A10-0`,5,8) |> as.integer()) |>
+  mutate(Geschlecht=str_sub(`C-C11-0`,5,5)) |>
+  mutate(Geschlecht=ifelse(Geschlecht==1,"m","w")) |>
+  mutate(Alter=str_sub(`C-GALTEJ112-0`,11,13)) |> 
+  mutate(Alter=as.integer(Alter)-1) |>
+  mutate(Alter=as.integer(Alter)) |>
+  mutate(GKZ=str_sub(`C-GRGEMAKT-0`,10,14) |> as.integer()) |>
+  mutate(pop=`F-ISIS-1` |> as.integer()) |>
+  select(Jahr,GKZ,Alter,Geschlecht,pop) |>
+  arrange(GKZ,Alter,Geschlecht,Jahr) |>
+  select(GKZ,Alter,Geschlecht,Jahr,pop) ->
+  pop_aut_GKZ_age1_gender_yearly
+
+
+save(
+  pop_aut_GKZ_age1_gender_yearly,
+     file=path(raw_data_path,
+               "pop_aut_GKZ_age1_gender_yearly.RData"))
+```
+
+```{r}
+bundeslaender_at <-
+  c(
+    "Burgenland",
+    "Kärnten",
+    "Niederösterreich",
+    "Oberösterreich",
+    "Salzburg",
+    "Steiermark",
+    "Tirol",
+    "Vorarlberg",
+    "Wien"
+    )
+```
+
+
+### Bevölkerung Bundesländer Alter jährlich
+
+Umrechnung Gemeindedaten auf Bundesländer
+
+
+```{r}
+pop_aut_GKZ_age1_gender_yearly |>
+  mutate(Bundesland=floor(GKZ/10000)) |>
+  group_by(Bundesland,Jahr,Alter,Geschlecht) |>
+  summarise(pop=sum(pop)) |>
+  ungroup() |>
+  mutate(Bundesland=bundeslaender_at[Bundesland]) |>
+  arrange(Bundesland,Geschlecht,Alter,Jahr) |>
+  select(Bundesland,Geschlecht,Alter,Jahr,pop) ->
+  pop_aut_bl_age1_gender_yearly
+
+  pop_aut_bl_age1_gender_yearly |>
+    tail()
+
+save(
+  pop_aut_bl_age1_gender_yearly,
+     file=path(raw_data_path,
+               "pop_aut_bl_age1_gender_yearly.RData")) 
+```
+
+
+```{r}
+years_with_53_weeks <- c(2004,2009,2015,2020)
+```
+
+
+```{r}
+expand_grid(
+  Jahr = pop_aut_bl_age1_gender_yearly |> pull(Jahr) |> unique(),
+  Woche = 1:53,
+) |>
+  filter(Woche <= 52 | Jahr %in% years_with_53_weeks) |>
+  group_by(Jahr) |>
+  mutate(Jahr_Woche = Jahr+(Woche-1)/max(Woche)) |>
+  ungroup() ->
+  year_week_skeleton
+```
+
+```{r}
+start_date_2002 <-
+  as.Date("2001-12-31")
+```
+
+
+#### Interpolation Bevölkerung Bundesländer Alter wöchentlich 
+
+
+Bis 1. Jänner 2021
+
+```{r}
+year_week_skeleton |>
+  expand_grid(
+    pop_aut_bl_age1_gender_yearly |>
+      select(Bundesland,Alter,Geschlecht) |>
+      distinct()
+  ) |>
+  arrange(Bundesland,Geschlecht,Alter,Jahr,Woche) |>
+  left_join(tibble(pop_aut_bl_age1_gender_yearly,
+                   Woche=as.integer(1))) |>
+  group_by(Bundesland,Geschlecht,Alter) |>
+  mutate(
+    pop_new = 
+      approxfun(
+        cur_data() |> filter(!is.na(pop)) |> pull(Jahr_Woche),
+        cur_data() |> filter(!is.na(pop)) |> pull(pop),
+        rule=2)(Jahr_Woche)
+    ) |>
+  mutate(Datum=seq(start_date_2002,by=7,length.out=length(Woche))) |>
+  ungroup() |>
+  select(-pop) |>
+  rename(pop=pop_new) |>
+  select(Bundesland,Alter,Geschlecht,Jahr,Woche,pop,
+         Jahr_Woche,Datum) ->
+  pop_aut_bl_age1_gender_weekly
+
+save(pop_aut_bl_age1_gender_weekly,
+     file=path(raw_data_path,"pop_aut_bl_age1_gender_weekly.RData"))
+```
+
+
+### Deutschland
+
+#### Datemnuise
+Kein Download per Programm sondern Genesisabfrage unter
+
+https://www-genesis.destatis.de/genesis//online?operation=table&code=12411-0013&bypass=true&levelindex=1&levelid=1644518375138#abreadcrumb
+
+https://www-genesis.destatis.de
+
+Dann Menü
+1 Gebiet, Bevölkerung, Arbeitsmarkt, Wahlen      
+12 Bevölkerung      
+124 Bevölkerungsstand, -vorausberechnung   
+12411 Fortschreibung des Bevölkerungsstandes        
+12411-0013 Bevölkerung: Bundesländer, Stichtag, Geschlecht, Altersjahre     
+
+Dann Abfrage    
+Die letzten 21 Zeitangaben      
+Bundesländer alle     
+Geschlecht alle      
+Altersjahre alle 
+
+Werteabrif starten   
+XLSX downloaden
+
+ergibt Datei `12411-0013.xlsx`
+
+Im Folder `data` speichern
+
+Datei ist groß, Sie brauchen einen (gratis) Account bei DeStatis-Genesis und müssen sich damit anmelden
+
+
+
+Stichtag 31.12
+Wird umgelegt auf 1.1. Folgejahr
+
+```{r}
+bundeslaender_ger <-
+  c(
+    "Baden-Württemberg",
+    "Bayern",
+    "Berlin",
+    "Brandenburg",
+    "Bremen",
+    "Hamburg",
+    "Hessen",
+    "Mecklenburg-Vorpommern",
+    "Niedersachsen",
+    "Nordrhein-Westfalen",
+    "Rheinland-Pfalz",
+    "Saarland",
+    "Sachsen",
+    "Sachsen-Anhalt",
+    "Schleswig-Holstein",
+    "Thüringen"
+  )
+```
+
+#### Bevölkerung Bundesländer Alter jährlich 
+
+Bis 31.12.2020 
+31.12. ungelegt auf 1.1. des Folgejahres
+
+```{r}
+read_excel(path(raw_data_path,
+                "12411-0013.xlsx"),
+                skip=4) |> 
+  rename(Alter=1) |>
+  mutate(Jahr=ifelse(str_detect(Alter,"31.12"),Alter,NA)) |>
+  select(Jahr,everything()) |>
+  mutate(Jahr=str_sub(Jahr,7,10) |> as.integer()) |>
+  fill(Jahr) |>
+  filter(Jahr >= 1990) |>
+  mutate(Jahr = Jahr+1 |> as.integer()) |>
+  drop_na(`männlich...2`) |>
+  mutate(Alter=str_replace(Alter,"90 Jahre und mehr","90-jährige")) |>
+  mutate(Alter=str_replace(Alter,"unter 1 Jahr","0-jährige")) |>
+  mutate_at(vars(3:50),as.integer) |>
+  pivot_longer(cols=3:50,
+               names_to = "Geschlecht",
+               values_to ="pop") |>
+  mutate(Geschlecht=str_sub(Geschlecht,1,1)) |>
+  filter(Geschlecht != "I") |>
+  filter(Alter != "Insgesamt") |>
+  mutate(Bundesland=rep(rep(bundeslaender_ger,each=2),
+         length.out=length(Geschlecht))) |>
+  select(Bundesland,everything()) |>
+  rowwise() |>
+  mutate(Alter=str_split_fixed(Alter,"-",2)[1] |> as.integer()) |>
+  arrange(Bundesland,Alter,Geschlecht,Jahr,pop) ->
+  pop_ger_bl_age1_gender_yearly
+
+save(pop_ger_bl_age1_gender_yearly,
+     file=path(raw_data_path,
+               "pop_ger_bl_age1_gender_yearly.RData"))
+```
+
+
+
+#### Interpolation Bevölkerung Bundesländer Alter wöchentlich 
+
+
+
+```{r}
+gc() |> invisible()
+year_week_skeleton |>
+  expand_grid(
+    pop_ger_bl_age1_gender_yearly |>
+      select(Bundesland,Alter,Geschlecht) |>
+      distinct()
+  ) |>
+  arrange(Bundesland,Geschlecht,Alter,Jahr,Woche) |>
+  left_join(tibble(pop_ger_bl_age1_gender_yearly |>
+                   filter(Jahr >= 2002),
+                   Woche=as.integer(1))) |>
+  group_by(Bundesland,Geschlecht,Alter) |>
+  mutate(
+    pop_new = 
+      approxfun(
+        cur_data() |> filter(!is.na(pop)) |> pull(Jahr_Woche),
+        cur_data() |> filter(!is.na(pop)) |> pull(pop),
+        rule=2)(Jahr_Woche)
+    ) |>
+  mutate(Datum=seq(start_date_2002,by=7,length.out=length(Woche))) |>
+  ungroup()  |>
+  select(-pop) |>
+  rename(pop=pop_new) |>
+  select(Bundesland,Alter,Geschlecht,Jahr,Woche,pop,
+         Jahr_Woche,Datum) ->
+  pop_ger_bl_age1_gender_weekly
+
+save(pop_ger_bl_age1_gender_weekly,
+     file=path(raw_data_path,"pop_ger_bl_age1_gender_weekly.RData"))
+```
+
+
+
+# Todesfälle 
+
+
+## Österreich
+
+Download von Statistik Austria
+
+https://data.statistik.gv.at/data/OGD_gest_kalwo_alter_GEST_KALWOCHE_5J_100.csv
+
+```{r}
+altersgruppe_at <-
+  c(paste(seq(0,90,5),seq(0,90,5)+4,sep="-"),"95-")
+```
+
+### Todesfälle Bundesländer Alter wöchentlich
+
+```{r}
+suppressMessages(
+read_csv2(
+  "https://data.statistik.gv.at/data/OGD_gest_kalwo_alter_GEST_KALWOCHE_5J_100.csv")) |>
+mutate(Jahr=str_sub(`C-KALWOCHE-0`,6,9) |> as.numeric()) |>
+  mutate(Woche=str_sub(`C-KALWOCHE-0`,10,11) |> as.numeric()) |>
+  mutate(Alter5=str_sub(`C-ALTER5-0`,8,9) |> as.integer()) |>
+  mutate(BundeslandID=str_sub(`C-B00-0`,5,5) |> as.integer()) |>
+  mutate(Bundesland=bundeslaender_at[BundeslandID]) |>
+  mutate(Altersgruppe=altersgruppe_at[Alter5]) |>
+  mutate(Geschlecht=str_sub(`C-C11-0`,5,5)) |>
+  mutate(Geschlecht=ifelse(Geschlecht==1,"m","w")) |>
+  rename(Tote=`F-ANZ-1`) |>
+  arrange(Bundesland,Altersgruppe,Geschlecht,Jahr,Woche) |>
+  select(Bundesland,Geschlecht,Altersgruppe,Jahr,Woche,Tote) ->
+  deaths_aut_bl_age5_weekly
+
+save(deaths_aut_bl_age5_weekly,
+     file=path(raw_data_path,"deaths_aut_bl_age5_weekly.RData"))
+```
+
+
+
+
+## Deutschland
+
+Quelle:
+https://www.destatis.de/DE/Themen/Gesellschaft-Umwelt/Bevoelkerung/Sterbefaelle-Lebenserwartung/Tabellen/sonderauswertung-sterbefaelle.html
+
+Manueller Dowload des XLSX-Files
+
+`sonderauswertung-sterbefaelle.xlsx` in Folder `data` speichern.
+
+Verwendet Altersgruppem
+
+Altersgruppen 0-65 65-75 75-85 85-
+
+
+### Todesfälle Bundesländer Altersgruppe wöchentlich
+
+```{r}
+read_excel(path(raw_data_path,"sonderauswertung-sterbefaelle.xlsx"),
+           sheet="BL_2016_2022_KW_AG_Ins",
+           skip=8) |>
+  rename(Jahr=2,
+         Bundesland=3,
+         Altersgruppe=4) |>
+  select(-1) |>
+  mutate(`53`= ifelse(nchar(`53`)==0,NA,`53`)) |>
+  mutate(`53`= ifelse(nchar(`53`)=="X",NA,`53`)) |>
+  mutate_at(vars(`1`:`53`),as.integer) |>
+  mutate(Jahr=as.integer(Jahr)) |>
+  mutate_at(vars(`1`:`53`),as.integer) |>
+  arrange(Jahr) |>
+  pivot_longer(cols=`1`:`53`,
+              names_to = "Woche",
+              values_to = "Tote"
+  ) |>
+  drop_na() |>
+  mutate(Woche=as.integer(Woche)) |>
+  filter(Altersgruppe != "Insgesamt") |>
+  mutate(Altersgruppe=str_replace(Altersgruppe,"85 u. mehr","85-")) |>
+  arrange(Bundesland,Altersgruppe,Jahr,Woche) |>
+  select(Bundesland,Altersgruppe,Jahr,Woche,Tote) ->
+  deaths_ger_bl_agegroup_coarse_weekly
+
+save(deaths_ger_bl_agegroup_coarse_weekly,
+     file=path(raw_data_path,
+               "deaths_ger_bl_agegroup_coarse_weekly.RData"))
+```
+## Kombination Deutschland Österreich Bevölkerung Tote
+
+```{r}
+load(path(raw_data_path,
+          "pop_ger_bl_age1_gender_weekly.Rdata"))
+```
+
+```{r}
+pop_ger_bl_age1_gender_weekly |>
+  filter(Jahr >= 2016) |>
+  mutate(
+    Altersgruppe=
+      case_when(
+        Alter <= 64 ~ "0-65",
+        Alter <= 74 ~ "65-75",
+        Alter <= 84 ~ "75-85",
+        TRUE ~ "85-"
+      )
+  ) |>
+  group_by(Bundesland,Altersgruppe,Jahr,Woche) |>
+  summarise(pop=sum(pop),
+            Jahr_Woche=first(Jahr_Woche),
+            Datum=first(Datum)) |>
+  ungroup()->
+  pop_ger_normalized
+```
+
+```{r}
+load(path(raw_data_path,
+          "deaths_ger_bl_agegroup_coarse_weekly.RData"))
+```
+
+```{r}
+deaths_ger_bl_agegroup_coarse_weekly |>
+    ungroup()->
+  deaths_ger_normalized
+```
+
+```{r}
+load(path(raw_data_path,
+          "pop_aut_bl_age1_gender_weekly.RData"))
+```
+
+```{r}
+pop_aut_bl_age1_gender_weekly |>
+  filter(Jahr >= 2016) |>
+    mutate(
+    Altersgruppe=
+      case_when(
+        Alter <= 64 ~ "0-65",
+        Alter <= 74 ~ "65-75",
+        Alter <= 84 ~ "75-85",
+        TRUE ~ "85-"
+      )
+  ) |>
+  group_by(Bundesland,Altersgruppe,Jahr,Woche) |>
+  summarise(pop=sum(pop),
+            Jahr_Woche=first(Jahr_Woche),
+            Datum=first(Datum)) |>
+    ungroup() ->
+  pop_aut_normalized
+```
+
+
+
+```{r}
+deaths_aut_bl_age5_weekly |>
+  filter(Jahr >= 2016) |>
+  mutate(
+    Altersgruppe=
+      case_when(
+        Altersgruppe %in% c("65-69","70-74") ~ "65-75",
+        Altersgruppe %in% c("75-79","80-84") ~ "75-85",
+        Altersgruppe %in% c("85-89","90-94", "95-") ~ "85-",
+        TRUE ~ "0-65"
+      )
+  ) |>
+  group_by(Bundesland,Altersgruppe,Jahr,Woche) |>
+  summarise(Tote=sum(Tote)) |>
+  ungroup() ->
+  deaths_aut_normalized
+```
+
+
+
+```{r}
+east_west <- function(Bundesland) {
+  bl_ost <-
+    c(
+      "Brandenburg",
+      "Mecklenburg-Vorpommern",
+      "Sachsen",
+      "Sachsen-Anhalt",
+      "Thüringen"
+    )
+  ifelse(Bundesland %in% bl_ost, "Deutschland-Ost", "Deutschland-West")
+}
+```
+
+```{r}
+pop_ger_normalized |>
+  left_join(deaths_ger_normalized) |>
+  mutate(Land="Deutschland") |>
+  mutate(Gebiet=east_west(Bundesland)) |>
+bind_rows(
+  pop_aut_normalized |>
+    left_join(deaths_aut_normalized) |>
+    mutate(Land="Österreich",
+           Gebiet="Österreich") 
+  ) |>
+  select(Land,Gebiet,Bundesland:pop,Tote,everything()) |>
+  mutate_at(vars(Jahr,Woche),as.integer)->
+  pop_deaths_aut_ger_agegroup_weekly
+
+save(pop_deaths_aut_ger_agegroup_weekly,
+     file=path(raw_data_path,
+           "pop_deaths_aut_ger_agegroup_weekly.RData"))
+```
+
+```{r}
+load(path(raw_data_path,"pop_ger_bl_age1_gender_yearly.RData"))
+load(path(raw_data_path,"pop_aut_bl_age1_gender_yearly.RData"))
+```
+
+
+```{r}
+pop_ger_bl_age1_gender_yearly |>
+  filter(Jahr >= 2016) |>
+  mutate(Alter=pmin(90,Alter)) |>
+  group_by(Bundesland,Jahr,Alter) |>
+  summarise(pop=sum(pop)) |>
+  ungroup() |>
+bind_rows(
+
+
+pop_aut_bl_age1_gender_yearly |>
+  filter(Jahr >= 2016) |>
+  mutate(Alter=pmin(90,Alter)) |>
+  group_by(Bundesland,Jahr,Alter) |>
+  summarise(pop=sum(pop)) |>
+  ungroup()
+) ->
+  pop_aut_ger_bl_age1_yearly
+save(pop_aut_ger_bl_age1_yearly,
+     file=path(raw_data_path,
+               "pop_aut_ger_bl_age1_yearly.RData"))
+```
+

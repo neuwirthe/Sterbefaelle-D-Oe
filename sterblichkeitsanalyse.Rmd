@@ -1,0 +1,850 @@
+---
+title: "Sterblichkeitsanalyse Deutschland - Österreich"
+author: "Erich Neuwirth"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 4
+  pdf_document: 
+    toc: yes
+    toc_depth: 4
+header-includes:
+  \renewcommand{\contentsname}{Inhalt}    
+---
+
+
+
+```{r local_setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, 
+                      warning = FALSE, comment = NULL,
+                      fig.align = "center")
+options(scipen = 999)
+options(OutDec = ",")
+options(decimal.mark = ",")
+```
+
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(fs)
+  library(here)
+  library(ggiraph)
+  library(scales)
+  library(gt)
+  library(ggmosaic)
+  library(lubridate)
+}
+)
+```
+
+```{r}
+data_path <-
+  path(here(),"data","aut_ger")
+```
+
+```{r utils}
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+
+theme_date_vert <- function(){
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle=90,size=7,hjust=1,
+                                   vjust=0.5))
+}
+
+
+hover_inv_opacity <- "opacity:0.25;"
+
+make_chart_html <- function(chart_in, height_factor = 1) {
+  height_svg <- 3.6 * height_factor
+  width_svg <- 6
+  sizing_width <- 0.9
+  girafe(
+    ggobj = chart_in, 
+    width_svg = width_svg, 
+    height_svg = height_svg * height_factor
+  ) -> ggobj
+  girafe_options(
+    x = ggobj,
+    opts_zoom(min = 1, max = 3),
+    opts_sizing(width = sizing_width),
+   opts_hover(css = "stroke:dimgrey;stroke-width:2pt;"),
+    opts_hover_inv(css = hover_inv_opacity),
+    opts_tooltip(
+    css = "font-family:sans-serif;color:black;font-size:small;bacground-color:white;",
+    use_fill = FALSE,
+    offx = -10, offy = -20
+  )
+  )
+}
+```
+
+
+
+
+```{r}
+pal_eastwest <- gg_color_hue(3) 
+  names(pal_eastwest) <- c("Deutschland-Ost","Deutschland-West","Österreich")
+  
+```
+
+```{r}
+pal_aut_ger <- c("gold3",pal_eastwest[3])
+names(pal_aut_ger) <- c("Deutschland","Österreich")
+```
+
+```{r}
+pal_complete <-
+  c(pal_eastwest[1:2],"gold3",pal_eastwest[3])
+names(pal_complete) <- c("Deutschland-Ost","Deutschland-West",
+                         "Deutschland-Gesamt","Österreich")
+```
+
+```{r}
+raw_data_path <-
+  path(here(),"data","aut_ger","raw_data")
+```
+
+```{r}
+with_thousands <-
+  function(x){
+    prettyNum(x,big.mark = ".", decimal.mark = ",")
+  }
+```
+
+```{r}
+theme_border <- function(){
+  theme_minimal() +
+    theme(panel.border=element_rect(fill="transparent"))
+}
+```
+
+
+```{r}
+data_path <-
+  path(here(),"data")
+```
+
+```{r}
+load(path(data_path,
+     "pop_deaths_aut_ger_agegroup_weekly.RData")) 
+```
+
+```{r}
+pop_deaths_aut_ger_agegroup_weekly ->
+  complete_data_weekly
+```
+
+```{r}
+complete_data_weekly |>
+  bind_rows(
+    complete_data_weekly |>
+      filter(Land=="Deutschland") |>
+      mutate(Gebiet="Deutschland-Gesamt")
+  )  ->
+  complete_data_weekly
+```
+
+```{r}
+regions_ger <- c("Deutschland-Ost", "Deutschland-West")
+```
+
+```{r}
+y_title <- "Verstorbene pro Mio Einwohner"
+```
+
+## Zusammenfassung
+
+*Es gibt derzeit verschiedene Publikationen (Webseiten und Zeitschriftenartikel), die errechnen, dass es in Deutschland 2020 keine in Vergleich zu den Vorjahren erhöhte Sterblichkeit gibt.*
+
+*Dieses Ergebnis erhält man, wenn man die Änderungen der Altersstruktur herausrechnet. Die Sterblichkeit ist bei Älteren natürlich höher als bei Jüngeren, und seit 2016 ist der Anteil der Älteren höher und der Anteil der Jüngeren niedriger geworden.*
+
+*Rechnet man die Sterblichkeit mit konstanter Altersstruktur von 2021, dann zeigt sich 2020 tatsächlich keine erhöhte Sterblichkeit.*
+
+
+*Nimmt man allerdings auch die Daten des Kalenderjahrs 2021 dazu, dann sieht man, dass es von 2019 auf 2021 auch in den altersbereinigten Sterbefallzahlen sehr wohl einen Anstieg der Sterblichkeit gibt.*
+
+*Dahinter steckt ein Problem, das nicht sofort ins Auge springt: die bisher stärkste COVID-Welle war an der Jahreswende 2020-2021. Die Hälfte der Sterbefälle wird dem Jahr 2020 zugerechnet, die andere dem Jahr 2021. Rechnet man in Kalenderjahren und nur bis 2020, dann fließen die Hälfte der Sterbefälle nicht in die Berechnung ein.*
+
+*Rechnet man dagegen mit den Perioden, die jeweils ein halbes Jahr vor und nach der Jahreswende enthalten und somit immer ganze Saisonen von im Herbst und Winter auftretenden Infektionskrankheiten enthalten, dann zeigt sich sowohl in den altersbereinigten als auch den unbereinigten Sterbefallzahlen ein deutlicher Anstieg. Der Anstieg ist in Österreich ausgeprägter als in Deutschland.*
+
+## Untersuchungen mit Kalenderjahr-Gliederung
+
+### Sterbefälle wöchentlich
+
+```{r}
+complete_data_weekly |>
+  filter(!(Gebiet %in% regions_ger)) |>
+  group_by(Land,Jahr,Woche,Datum) |>
+  summarise_at(vars(Tote,pop),sum) |>
+  ungroup() |>
+  mutate(Tote_mio=1000000*Tote/pop) |>
+  ggplot(aes(x=Datum,y=Tote_mio,color=Land)) +
+  geom_line() +
+  scale_x_date("Jahr", breaks="1 year",label=year) +
+  scale_y_continuous(y_title,limits=c(0,NA)) +
+  scale_color_manual(values=pal_aut_ger) +
+  theme_minimal() -> 
+  chart_aut_ger_weekly
+make_chart_html(
+  chart_aut_ger_weekly
+)  
+```
+
+In vielen Publikationen werden Sterbefallzahlen pro Kalenderjahr berechnet, die Zahlen werden also in folgenden Segmenten der Grafik addiert:
+
+```{r}
+chart_aut_ger_weekly +
+  geom_vline(xintercept=paste(2016:2022,"01","01",sep="-") |> as.Date(),
+             linetype="dotted") ->
+  chart
+  make_chart_html(chart)
+```
+
+```{r}
+complete_data_weekly |>
+  filter(!(Gebiet %in% regions_ger)) |>
+  mutate(Jahr_neu = 
+           ifelse(Jahr == 2020 & Woche == 53, 2021,
+             ifelse(Jahr == 2021 & Woche == 52, 2022,
+             Jahr)),
+         Woche_neu=
+           ifelse(Jahr == 2020 & Woche == 53, 1,
+                  ifelse(Jahr == 2021 & Woche == 52,1,
+                         ifelse(Jahr==2021,Woche+1,Woche)))) |>
+  filter(Jahr_neu < 2022) |>
+  mutate(Jahr=Jahr_neu,
+         Woche=Woche_neu) |>
+  select(-Jahr_neu,-Woche_neu) ->
+complete_data_weekly_mod
+```
+
+```{r}
+complete_data_weekly_mod |>
+  group_by(Land,Gebiet,Jahr,Altersgruppe,Woche) |>
+  summarise_at(vars(pop,Tote),sum) |>
+  summarise(Tote=sum(Tote),pop=mean(pop)) |>
+  ungroup() |>
+  mutate(Tote_mio=1000000*Tote/pop) ->
+  complete_data_yearly_mod
+```
+
+```{r}
+complete_data_weekly_mod |>
+group_by(Land,Jahr,Woche) |>
+  summarise_at(vars(pop,Tote),sum) |>
+  summarise(pop=mean(pop),Tote=sum(Tote)) |>
+  ungroup() |>
+  mutate(Tote_mio=1000000*Tote/pop) ->
+  deaths_mio_aut_ger_yearly_mod
+```
+
+### Sterbefälle jährlich
+
+Wenn wir jetzt aus den wöchentlichen Zahlen die Jahressummen errechnen wollen, dann gibt es ein kleines Problem: Das Jahr 2020 hat 53 Kalenderwochen.
+Das sind immerhin ungefähr 2% mehr Tage, und das würde die Jahressumme der Sterbefallzahlen erhöhen.
+Deswegen rechnen wir Woche 53 des Jahres 2020 zum Jahr 2021 dazu und lassen dafür Woche 52 des Jahres 2021 weg.
+Dann haben wir wieder Jahresperioden von jeweils 52 Wochen.
+
+Zur Berechnung der Sterbefälle pro Million Einwohner verwenden wir die durchschnittliche Bevölkerungszahl der einzelnen Jahre.
+
+Mit dieser Modifikation betragen die jährlichen Sterbefallzahlen
+
+```{r}
+deaths_mio_aut_ger_yearly_mod |>
+  select(Land,Jahr,Tote_mio) |>
+  pivot_wider(names_from=Land,
+              values_from=Tote_mio) |>
+  gt() |>
+  fmt_number(columns = 2:3,decimals = 0,
+             sep_mark = ".")
+```
+
+Grafisch dargestellt sieht das so aus:
+
+```{r}
+deaths_mio_aut_ger_yearly_mod |>
+  select(Jahr,Land,Tote_mio) |>
+  ggplot(aes(x=Jahr,y=Tote_mio,color=Land)) +
+  geom_line() +
+  geom_point(size=4) +
+  scale_y_continuous(y_title,limits=c(0,NA),label=with_thousands) +
+  scale_color_manual(values=pal_aut_ger) +
+  theme_minimal()  ->
+  chart
+make_chart_html(
+  chart
+)
+```
+
+### Sterbefälle in Altersgruppen
+
+Wir wenden uns jetzt den Sterberaten in verschiedenen Altersgruppen zu.
+
+Die Sterbefalldaten für Deutschland, die wir verwenden, unterscheiden nur 4 Altersgruppen: 0-65, 65-75, 75-85, und 85 und mehr.
+Wir verwenden daher für die Daten aus Österreich dieselben Altersgruppen.
+
+Die Sterberate, also die Zahl der Sterbefälle pro Million in einer Gruppe, variiert zwischen verschiedenen Altersgruppen sehr stark.
+Sie ist bei Älteren wesentlich höher als bei Jüngeren.
+
+```{r}
+c("Deutschland_0-65"="D",
+"Österreich_0-65"="Öst",	
+"Deutschland_65-75"="D",	
+"Österreich_65-75"="Öst",	
+"Deutschland_75-85"="D",	
+"Österreich_75-85"="Öst",	
+"Deutschland_85-"="D",	
+"Österreich_85-"="Öst") ->
+  tab_labels
+```
+
+```{r}
+complete_data_yearly_mod |>
+  filter(!(Gebiet %in% regions_ger)) |>
+  select(-Gebiet,-Tote,-pop) |>
+  arrange(Altersgruppe,Land) |>
+  pivot_wider(
+    names_from = c(Land,Altersgruppe),
+    values_from = Tote_mio
+  ) |> 
+  gt() |>
+  fmt_number(columns=2:9,decimals=0,sep_mark = ".") |>
+  cols_label(.list=tab_labels) |>
+  tab_spanner(label="0-65",columns = 2:3) |>
+  tab_spanner(label="65-75",columns = 4:5) |>
+  tab_spanner(label="75-85",columns = 6:7) |>  
+  tab_spanner(label="85-",columns = 8:9) |>
+  cols_align(align="center",columns=2:9)
+```
+
+Wir sehen enorme Unterschiede der Sterberaten in den Altersgruppen.
+Die Sterberate der Gruppe 65-75 ist ungefähr 7-8-mal so groß wie die Sterberate der Gruppe 0-65, die der Gruppe 75-85 ist ungefähr 2,5-mal so hoch die wie die der Gruppe 65-75, und die der Gruppe 85- ist ungefähr 3,5-4x so hoch wie die der Gruppe 75-85.
+
+In einer Grafik sieht das so aus:
+
+```{r}
+complete_data_yearly_mod |>
+  filter(!(Gebiet %in% regions_ger)) |>
+  select(-Gebiet,-Tote,-pop) |>
+  arrange(Altersgruppe,Land) |>
+  ggplot(aes(x=Jahr,y=Tote_mio,color=Land)) +
+  geom_line() +
+  geom_point(size=3) +
+  facet_wrap(vars(Altersgruppe)) +
+  scale_y_continuous(y_title,limits=c(0,NA),
+                     label=with_thousands) +
+ theme_border() ->
+  chart
+make_chart_html(
+  chart
+)
+```
+
+Die Größenunterschiede machen es nahezu unmöglich, den zeitlichen Verlauf bei den unteren Altersgruppen zu sehen.
+Deswegen stellen wir diese Daten noch einmal dar, und zwar mit verschiedenen senkrechten Skalen bei den einzelnen Altersgruppen.
+
+```{r}
+complete_data_yearly_mod |>
+  filter(!(Gebiet %in% regions_ger)) |>
+  select(-Gebiet,-Tote,-pop) |>
+  arrange(Altersgruppe,Land) |>
+  ggplot(aes(x=Jahr,y=Tote_mio,color=Land)) +
+  geom_line() +
+  geom_point(size=3) +
+  facet_wrap(vars(Altersgruppe),scales="free_y") +
+  scale_y_continuous(y_title,limits=c(0,NA),
+                     label=with_thousands) +
+  theme_border()  ->
+  chart
+make_chart_html(
+  chart
+)
+```
+
+In allen Altersgruppen mit Ausnahme der Gruppe 85- nimmt die Sterberate in den letzten beiden Jahren deutlich zu.
+In Österreich gibt es in der Gruppe 75-85 eine ziemlich ausgeprägte Zunahme, in der Gruppe 85- nimmt die Sterberate von 2020 auf 2021 dagegen sogar ab.
+
+Vergleiche der Gesamtsterberate vermischen die Altersstruktur der Bevölkerung und die zeitliche Veränderung der Sterberaten in den einzelnen Altersgruppen.
+
+Dazu sehen wir uns zunächst den zeitlichen Verlauf der Zusammensetzung der Bevölkerung an.
+
+### Altersstruktur
+
+```{r}
+complete_data_weekly_mod |>
+  filter(Woche==1) |>
+  group_by(Land,Jahr,Altersgruppe) |>
+  summarise(pop=sum(pop)) |>
+  ungroup() |>
+  group_by(Land,Jahr) |>
+  mutate(pop_anteil=pop/sum(pop)) |>
+  ungroup() |>
+  arrange(Land,Altersgruppe,Jahr) |>
+  select(Land,Jahr,Altersgruppe,pop_anteil) |>
+  arrange(Altersgruppe,Land) |>
+  pivot_wider(
+    names_from=c(Land,Altersgruppe),
+    values_from = pop_anteil) |>
+  gt() |>
+ fmt_percent(columns=2:9,decimals=1,sep_mark = ".",
+             dec_mark = ",") |>
+  cols_label(.list=tab_labels) |>
+  tab_spanner(label="0-65",columns = 2:3) |>
+  tab_spanner(label="65-75",columns = 4:5) |>
+  tab_spanner(label="75-85",columns = 6:7) |>  
+  tab_spanner(label="85-",columns = 8:9) |>
+  cols_align(align="center",columns=2:9)  
+```
+
+In beiden Länder sinkt der Anteil der Altersgruppe 0-65 um ungefähr 1 Prozentpunkt.
+Dieser Anteil ist in Österreich die ganze Zeit um ungefähr 3 Prozentpunkte höher als in Deutschland.
+Der Anteil der Gruppe 65-75 steigt in beiden Ländern um weniger als 1 Prozentpunkt, in Deutschland aber stärker als in Österreich.
+Der Anteil der Gruppe 75-85 steigt in Deutschland bis 2019 und sinkt dann wieder etwas, in Österreich steigt dieser Anteil stetig.
+Der Anteil der Altersgruppe 85- steigt in Deutschland, in Österreich bleibt er konstant.
+
+Grafisch dargestellt sieht die Entwicklung der Bevölkerungsstruktur so aus:
+
+```{r}
+complete_data_weekly_mod |>
+  filter(Woche==1) |>
+  group_by(Land,Jahr,Altersgruppe) |>
+  summarise(pop=sum(pop)) |>
+  ungroup() |>
+  ggplot() +
+  geom_mosaic(aes(product(Altersgruppe,Jahr,Land),
+                  weight=pop,
+                  fill=Altersgruppe),
+              divider=c("vspine",rep("hspine",2))) +
+  guides(fill=guide_legend(reverse=TRUE)) +
+  theme_date_vert()  ->
+  chart
+make_chart_html(
+  chart
+)
+```
+
+Wir sehen in Deutschland kaum Veränderungen in der Altersstruktur.
+In Österreich sind die Anteile der Altersgruppen ab 65 in der Gesamtbevölkerung deutlich niedriger als in Deutschland.
+Dieser Anteil steigt im Laufe der Zeit, bleibt aber trotzdem niedriger als in Deutschland.
+
+
+### Altersbereinigte Sterbequoten
+
+
+Wir wollen jetzt den demografischen Wandel „herausrechnen" und berechnen jene Gesamtsterberaten, die sich ergäben, wenn die Altersstruktur der Bevölkerung sich nicht ändern würde. Wir verwenden als Standardbevölkerung dazu zunächst in beiden Ländern die jeweilige Altersstruktur von 2021.
+
+```{r}
+complete_data_weekly_mod |>
+  filter(!(Gebiet %in% regions_ger)) |>
+  select(-Gebiet) |>
+  select(Land,Altersgruppe,Jahr,Woche,pop) |>
+  group_by(Land,Altersgruppe,Jahr,Woche) |>
+  summarise(pop=sum(pop)) |>
+  ungroup() |>
+  filter(Woche==1) |>
+  select(-Woche) |>
+  arrange(Land,Altersgruppe,Jahr) |>
+  filter(Jahr==max(Jahr)) |>
+  arrange(Land,Altersgruppe,Jahr) |>
+  select(-Jahr) |>
+  group_by(Land) |>
+  mutate(pop_anteil=pop/sum(pop)) |>
+  ungroup() ->
+  pop_aut_ger_agegroup_2021
+  
+```
+
+Mit dieser Altersstruktur erhalten wir folgende Sterberaten:
+
+```{r}
+complete_data_weekly_mod |>
+  filter(!(Gebiet %in% regions_ger)) |>
+  select(-Gebiet) |>
+  select(Land,Altersgruppe,Jahr,Woche,Datum,pop,Tote) |>
+  group_by(Land,Altersgruppe,Jahr,Woche,Datum) |>
+  summarise(pop=sum(pop),Tote=sum(Tote)) |>
+  ungroup() |>
+  mutate(death_rate=Tote/pop) |>
+  select(-pop,-Tote) |>
+  arrange(Land,Altersgruppe,Jahr,Woche) |>
+  left_join(pop_aut_ger_agegroup_2021) |>
+  mutate(Tote=death_rate*pop) |>
+  group_by(Land,Jahr,Woche,Datum) |>
+  summarise(Tote=sum(Tote),pop=sum(pop)) |>
+  ungroup() |>
+  mutate(Tote_mio=1000000*Tote/pop) ->
+  complete_data_weekly_mod_pop_2021
+```
+
+```{r}
+complete_data_weekly_mod_pop_2021 |>
+  ggplot(aes(x=Datum,y=Tote_mio,color=Land)) +
+  geom_line() +
+  scale_x_date("Jahr", breaks="1 year",label=year) +
+  scale_y_continuous(y_title,limits=c(0,NA)) +
+  scale_color_manual(values=pal_aut_ger) +
+  theme_minimal() ->
+  chart
+make_chart_html(
+  chart
+) 
+```
+
+Ein Vergleich mit den nicht altersbereinigten Daten sieht so aus:
+
+```{r}
+pal_typ <- c(altersbereingt="solid",unbereinigt="dotted")
+complete_data_weekly_mod |>
+  filter(!(Gebiet %in% regions_ger)) |>
+  select(-Gebiet) |>
+  select(Land,Jahr,Woche,Datum,pop,Tote) |>
+  group_by(Land,Jahr,Woche,Datum) |>
+  summarise(pop=sum(pop),Tote=sum(Tote)) |>
+  ungroup() |>
+  mutate(Tote_mio=1000000*Tote/pop) |>
+  select(Land,Jahr,Woche,Datum,Tote_mio) |>
+  mutate(Berechnung="unbereinigt") |>
+  bind_rows(complete_data_weekly_mod_pop_2021|>
+              mutate(Berechnung="altersbereinigt")) ->
+  pop_deaths_weekly_mixed
+```
+
+
+```{r}
+pop_deaths_weekly_mixed |>
+  ggplot(aes(x=Datum,y=Tote_mio,color=Land,linetype=Berechnung)) +
+  geom_line() +
+  scale_x_date("Jahr", breaks="1 year",label=year) +
+  scale_y_continuous(y_title,limits=c(0,NA)) +
+  scale_color_manual(values=pal_aut_ger) +
+  theme_minimal()   ->
+  chart_aut_ger_weekly_mixed
+make_chart_html(
+    chart_aut_ger_weekly_mixed
+)
+```
+
+Die Grafik lässt erkennen, dass die Altersbereinigung dazu führt, dass die Gesamtsterberate im früheren Zeitraum in Deutschland merkbar höher wird.
+In Österreich gibt es diesen Effekt auch, er ist aber geringer.
+
+Die altersbereinigte berechnete Zahl der Verstorbenen pro Million zeigt die folgende Tabelle.
+
+```{r}
+pop_deaths_weekly_mixed |>
+  group_by(Land,Jahr,Berechnung) |>
+  summarise(Tote_mio=sum(Tote_mio)) |>
+  ungroup() |>
+  arrange(Land,Berechnung,Jahr) ->
+  deaths_mio_yearly_mixed
+  deaths_mio_yearly_mixed |>
+  pivot_wider(
+    names_from = c(Land,Berechnung),
+    values_from = Tote_mio
+  ) |>
+  gt() |>
+  fmt_number(columns = 2:5,
+             decimals = 0,
+             sep_mark = ".") |>
+  cols_label(Deutschland_altersbereinigt="altersbereinigt",
+             Deutschland_unbereinigt="unbereinigt",
+             Österreich_altersbereinigt="altersbereinigt",
+             Österreich_unbereinigt="unbereinigt") |>
+  tab_spanner(columns=2:3,label="Deutschland") |>
+  tab_spanner(columns=4:5,label="Österreich") 
+```
+
+```{r}
+deaths_mio_yearly_mixed |>
+  ggplot(aes(x=Jahr,y=Tote_mio,color=Land,linetype=Berechnung)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(y_title,limits=c(0,NA),
+                     labels=with_thousands) +
+  scale_color_manual(values=pal_aut_ger) +
+#  scale_linetype(values=pal_typ) |>
+  theme_minimal() ->
+  chart
+make_chart_html(
+  chart
+)
+```
+
+Die Altersbereinigung führt dazu, dass die bereinigte Sterberate 2020 in Deutschland sich nicht mehr sehr deutlich von den Jahren davor abhebt.
+Die Aussage, dass die altersbereinigte Sterblichkeit in Deutschland 2020 nicht höher war als in den Vorjahren, stimmt somit.
+
+Die altersbereinigte Sterblichkeit in Deutschland ist aber 2021 deutlich höher als in den Jahren davor.
+Die Grafik der wöchentlichen Sterbefälle pro Million Einwohner - die wir schon gesehen haben, in der aber jetzt noch die Jahresgrenzen markiert sind, zeigt auch warum:
+
+```{r}
+chart_aut_ger_weekly_mixed +
+  geom_vline(xintercept=paste(2016:2022,"01","01",sep="-") |> as.Date(),
+             linetype="dotted") ->
+  chart
+make_chart_html(
+  chart
+)
+```
+
+Es gab eine sehr starke COVID-Welle um die Jahreswende 2020-2021.
+Nur die Hälfte dieser Sterbefälle wird dem Jahr 2020 zugerechnet.
+In den Jahren 2017 und 2018 gab es starke Grippewellen.
+Die erstreckten sich aber nur geringfügig über Jahresgrenzen, der überwiegende Teil fand innerhalb eines Jahres statt.
+
+Der Effekt mit der geteilten COVID-Welle 2020-2021 ist in Deutschland weitaus stärker ausgeprägt als in Österreich, weil der Höhepunkt dieser Welle in Österreich früher erreicht wurde als in Deutschland.
+
+Ein Vergleich der COVID-Welle mit den früheren Grippewellen ist also verzerrt, weil - etwas lax formuliert - die halbe COVID-Welle mit fast ganzen Grippewellen verglichen wird.
+
+## Untersuchungen mit Perioden Juli-Juni
+
+Wir haben gesehen, dass COVID-Wellen und auch Grippewellen über Jahresgrenzen hinweg stattfinden.
+Dadurch werden die Wellen bei der Kalenderjahr-Abrechnung auf 2 Jahre aufgeteilt.
+
+Wir wollen im Folgenden Perioden von Kalenderwoche 27 bis zur Kalenderwoche 26 des Folgejahres untersuchen, um jeweils komplette Wellen in unserer Gliederung zu erfassen.
+
+Diese Perioden sind 52 Wochen lang, fallen aber immer in 2 Kalenderjahre.
+
+```{r}
+year_period <-
+  function(Jahr,Woche){
+    case_when(
+      Woche <= 26 ~ Jahr-1,
+      TRUE ~ Jahr
+    )
+  }
+
+period_combined <- 
+  function(Jahr,Woche){
+    year_period(Jahr,Woche) |>
+    (\(x)paste(x,x+1,sep="-"))()
+  }  
+week_period <-
+  function(Jahr,Woche){
+    case_when(
+      Woche <= 26 ~ Woche+26,
+      TRUE ~ Woche-26
+    )
+  }
+  
+```
+
+```{r}
+complete_data_weekly_mod |> 
+  mutate(
+    Periodenjahr=year_period(Jahr,Woche),
+    Periode = period_combined(Jahr,Woche),
+         Woche_period=week_period(Jahr,Woche)) |>
+  filter(!(Periode %in% c("2015-2016","2021-2022"))) |>
+  group_by(Land,Gebiet,Altersgruppe,Jahr,Woche,Periodenjahr,
+           Periode,Woche_period,Datum) |>
+  summarise_at(vars(pop,Tote),sum) |>
+  ungroup() ->
+complete_data_weekly_mod_period  
+```
+
+### Wöchentliche Sterbefalldaten mit Periodengliederung
+
+```{r}
+complete_data_weekly_mod_period |>
+  select(Periode,Woche_period,Datum) |>
+  filter(Woche_period==1) |>
+  distinct() |>
+  pull(Datum) |>
+  (\(x)c(x,as.Date("2021-06-28")))() ->
+  period_borders
+```
+
+```{r}
+chart_aut_ger_weekly +
+  geom_vline(xintercept = period_borders,
+             linetype="dotted") ->
+  chart
+make_chart_html(
+  chart
+)
+```
+
+Wir sehen in dieser Grafik, dass die Grippewellen 2017 und 2018 und auch die COVID-Welle 2020-2021 komplett innerhalb einer Periode liegen.
+
+Beschriften wir die x-Achse mit den Perioden, dann sieht die Grafik so aus:
+
+```{r}
+chart_aut_ger_weekly +
+  scale_x_date("Periode",breaks="1 year",
+               label = \(x)paste(year(x)-1,year(x),sep="-")) +
+    geom_vline(xintercept = period_borders,
+             linetype="dotted") ->chatt
+make_chart_html(
+  chart
+)
+```
+
+```{r}
+complete_data_weekly_mod_period |>
+  group_by(Land,Gebiet,Periodenjahr,
+           Periode,Altersgruppe,Woche_period) |>
+  summarise_at(vars(pop,Tote),sum) |>
+  summarise(Tote=sum(Tote),pop=mean(pop)) |>
+  ungroup() |>
+  mutate(Tote_mio=1000000*Tote/pop) ->
+  complete_data_yearly_mod_period
+```
+
+Die folgende Tabelle zeigt die (nicht altersbereinigten) Sterbefallzahlen pro Million Einwohner in diesen Perioden.
+
+```{r}
+complete_data_weekly_mod_period |>
+group_by(Land,Gebiet,Periode,Periodenjahr,Woche_period) |>
+  summarise_at(vars(pop,Tote),sum) |>
+  summarise(pop=mean(pop),Tote=sum(Tote)) |>
+  ungroup() |>
+  mutate(Tote_mio=1000000*Tote/pop) ->
+  deaths_mio_aut_ger_period_mod
+```
+### Sterbefallzahlen in Periodengliederung
+
+```{r}
+deaths_mio_aut_ger_period_mod |>
+  select(Land,Periode,Tote_mio) |>
+  pivot_wider(names_from=Land,
+              values_from=Tote_mio) |>
+  gt() |>
+  fmt_number(columns = 2:3,decimals = 0,
+             sep_mark = ".")
+```
+
+Grafisch dargestellt sieht die Entwicklung so aus:
+
+```{r}
+deaths_mio_aut_ger_period_mod |>
+  select(Periode,Periodenjahr,Land,Tote_mio) |>
+  ggplot(aes(x=Periodenjahr,y=Tote_mio,color=Land)) +
+  geom_line() +
+  geom_point(size=4) +
+  scale_x_continuous("Periode",label=\(x)paste(x,x+1,sep="-")) +
+  scale_y_continuous(y_title,limits=c(0,NA),label=with_thousands) +
+  scale_color_manual(values=pal_aut_ger) +
+  theme_minimal()  -> chart
+make_chart_html(
+  chart
+)
+```
+
+Wir sehen hier deutlich den Anstieg der Sterbefallzahlen in der letzten Periode sowohl in Deutschland als auch in Österreich.
+
+
+Die Jahres-Sterberaten pro Altersgruppen in dieser Gliederung zeigt folgende Tabelle:
+
+```{r}
+complete_data_weekly_mod_period |>
+#  filter(!(Gebiet %in% regions_ger)) |>
+  select(Land,Gebiet,Altersgruppe,Periode,Periodenjahr,Woche_period,
+         pop,Tote) |>
+  group_by(Land,Gebiet,Altersgruppe,Periodenjahr,Periode) |>
+  summarise(pop=mean(pop),Tote=sum(Tote)) |>
+  ungroup() |>
+  mutate(Tote_mio=1000000*Tote/pop)->
+  complete_data_yearly_mod_period
+```
+
+### Sterbefallzahlen in Altersgruppen und Perioden
+
+```{r}
+complete_data_yearly_mod_period |>
+  filter(!(Gebiet %in% regions_ger)) |>
+  select(-Gebiet,-Tote,-pop,-Periodenjahr) |>
+  arrange(Altersgruppe,Land) |>
+  pivot_wider(
+    names_from = c(Land,Altersgruppe),
+    values_from = Tote_mio
+  ) |> 
+  gt() |>
+  fmt_number(columns=2:9,decimals=0,sep_mark = ".") |>
+  cols_label(.list=tab_labels) |>
+  tab_spanner(label="0-65",columns = 2:3) |>
+  tab_spanner(label="65-75",columns = 4:5) |>
+  tab_spanner(label="75-85",columns = 6:7) |>  
+  tab_spanner(label="85-",columns = 8:9) |>
+  cols_align(align="center",columns=2:9)
+```
+
+```{r}
+complete_data_yearly_mod_period |>
+  select(-pop,-Tote) |>
+  left_join(pop_aut_ger_agegroup_2021) |>
+  mutate(Tote_mio=Tote_mio*pop_anteil) |>
+  group_by(Land,Periodenjahr,Periode) |>
+  summarise(Tote_mio=sum(Tote_mio)) |>
+  ungroup() ->
+  deaths_aut_ger_agegroup_period_weigthed
+```
+### Sterbefallzahlen in Perioden - mit und ohne Altersbereinigung
+
+Die nächste Tabelle vergleicht Sterbefallzahlen über Perioden hinweg mit und ohne Altersbereinigung.
+
+```{r}
+##eaths_aut_ger_agegroup_period_weigthed |>
+#  select(-Periodenjahr) |>
+#  pivot_wider(names_from=Land,
+#              values_from = Tote_mio) 
+```
+
+```{r}
+deaths_aut_ger_agegroup_period_weigthed |>
+  mutate(Berechnung="altersbereinigt") |>
+  bind_rows(
+    deaths_mio_aut_ger_period_mod  |>
+      select(Land,Periodenjahr,Periode,Tote_mio) |>
+      mutate(Berechnung="unbereinigt")
+  ) -> deaths_aut_ger_agegroup_mixed
+
+```
+
+
+
+
+```{r}
+deaths_aut_ger_agegroup_mixed |>
+  select(-Periodenjahr) |>
+  arrange(Land,Berechnung,Periode) |>
+  pivot_wider(
+    names_from = c(Land,Berechnung),
+    values_from = Tote_mio
+  ) |>
+   gt() |>
+  fmt_number(columns = 2:5,
+             decimals = 0,
+             sep_mark = ".") |>
+  cols_label(Deutschland_altersbereinigt="altersbereinigt",
+             Deutschland_unbereinigt="unbereinigt",
+             Österreich_altersbereinigt="altersbereinigt",
+             Österreich_unbereinigt="unbereinigt") |>
+  tab_spanner(columns=2:3,label="Deutschland") |>
+  tab_spanner(columns=4:5,label="Österreich") 
+```
+
+```{r}
+deaths_aut_ger_agegroup_mixed |>
+ ggplot(aes(x=Periodenjahr,y=Tote_mio,color=Land,linetype=Berechnung)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(y_title,limits=c(0,NA),
+                     labels=with_thousands) +
+  scale_x_continuous("Periode",label=\(x)paste(x,x+1,sep="-")) +
+  scale_color_manual(values=pal_aut_ger) +
+#  scale_linetype(values=pal_typ) |>
+  theme_minimal() ->
+  chart
+make_chart_html(
+  chart
+)
+```
+
+Wir sehen, dass die Altersbereinigung die Sterbefallzahlen in Österreich kaum ändert.
+
+In Deutschland sind die altersbereinigten Sterbefallzahlen etwas höher als die unbereinigten.
+In der altersbereinigten Kurve sehen wir den Effekt der Grippewellen 2016-2017 und 2017-2018, in den beiden folgende Perioden, also von Juli 2018 bis Juni 2020, sind die Zahlen etwas niedriger.
+
+In beiden Ländern sehen wir aber einen deutlichen Anstieg der Sterbefallzahlen von der Periode 2019-2020 zu Periode 2020-2021.
