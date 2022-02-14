@@ -44,6 +44,11 @@ raw_data_path <-
   path(here(),"data")
 ```
 
+```{r}
+if(!dir_exists(raw_data_path)) {
+  dir_create(raw_data_path)
+}
+```
 
 
 ```{r}
