@@ -692,7 +692,6 @@ complete_data_weekly_mod_period |>
   complete_data_yearly_mod_period
 ```
 
-Die folgende Tabelle zeigt die (nicht altersbereinigten) Sterbefallzahlen pro Million Einwohner in diesen Perioden.
 
 ```{r}
 complete_data_weekly_mod_period |>
@@ -703,7 +702,29 @@ group_by(Land,Gebiet,Periode,Periodenjahr,Woche_period) |>
   mutate(Tote_mio=1000000*Tote/pop) ->
   deaths_mio_aut_ger_period_mod
 ```
+
+
+Legt man die Kurven der Sterbefallzahlen pro Periode auf einer gemeinsamen Zeitskala übereinander, dann erhält man folgendes Bild:
+
+
+```{r}
+pop_deaths_weekly_mixed |>
+  mutate(Periode=period_combined(Jahr,Woche),
+         Woche_period=week_period(Jahr,Woche)) |>
+  select(-Tote,-pop) |>
+  filter(!(Periode %in% c("2015-2016","2021-2022"))) |>
+  ggplot(aes(x=Woche_period,y=Tote_mio,color=Periode)) +
+  geom_line() +
+  scale_x_continuous("Woche in Periode") +
+  scale_y_continuous(y_title) +
+  facet_grid(Land ~ Berechnung) +
+  theme_border()
+```
+
+
 ### Sterbefallzahlen in Periodengliederung
+
+Die folgende Tabelle zeigt die (nicht altersbereinigten) Sterbefallzahlen pro Million Einwohner in diesen Perioden.
 
 ```{r}
 deaths_mio_aut_ger_period_mod |>
