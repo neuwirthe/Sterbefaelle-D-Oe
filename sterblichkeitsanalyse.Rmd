@@ -132,13 +132,17 @@ load(path(data_path,
      "pop_deaths_aut_ger_agegroup_weekly.RData")) 
 ```
 
+
+
 ```{r}
-pop_deaths_aut_ger_agegroup_weekly ->
-  complete_data_weekly
+complete_data_weekly_regions_bl |>
+  mutate(Periodenjahr=year_period(Jahr,Woche),
+         Woche_periode=week_period(Jahr,Woche),
+         Periode=period_combined(Jahr,Woche))
 ```
 
 ```{r}
-complete_data_weekly |>
+complete_data_weekly_regions_bl |>
   bind_rows(
     complete_data_weekly |>
       filter(Land=="Deutschland") |>
@@ -869,3 +873,162 @@ In Deutschland sind die altersbereinigten Sterbefallzahlen etwas höher als die 
 In der altersbereinigten Kurve sehen wir den Effekt der Grippewellen 2016-2017 und 2017-2018, in den beiden folgende Perioden, also von Juli 2018 bis Juni 2020, sind die Zahlen etwas niedriger.
 
 In beiden Ländern sehen wir aber einen deutlichen Anstieg der Sterbefallzahlen von der Periode 2019-2020 zu Periode 2020-2021.
+
+
+## Altersstruktur-Veränderung in den Bundesländern
+
+```{r}
+pop_deaths_aut_ger_agegroup_weekly |>
+  filter(Jahr==max(Jahr)) |>
+  filter(Woche==max(Woche)) |>
+  select(Land,Gebiet,Bundesland,Altersgruppe,pop) |>
+  distinct() ->
+  pop_bl_dec21
+```
+
+
+```{r}
+pop_bl_dec21 |>
+  select(Land,Gebiet,Bundesland) |>
+  arrange(Land,Gebiet) |>
+  distinct() ->
+  bl_ordered
+```
+
+
+```{r}
+label_positions <-
+  function(data,group_var,var_to_sum,offset=0.01){
+    data |>
+      group_by({{group_var}}) |>
+      summarise(result=sum({{var_to_sum}})) |>
+      ungroup() |>
+      mutate(result=result+sum(result)*
+               offset*c(1/2,rep(1,length(result)-2),1/2)) |>
+      mutate(result=cumsum(result/sum(result)))|>
+      mutate(left_point=lag(result)) |>
+      replace_na(list(left_point=0)) |>
+      mutate(result=(result+left_point)/2) |>
+      pull(result)
+  }
+```
+
+
+
+```{r}
+pop_deaths_aut_ger_agegroup_weekly  |>
+  filter(Land=="Deutschland") |>
+  filter(Woche==1) |>
+  arrange(Gebiet,Bundesland) |>
+  select(-Woche) ->
+  data_in
+
+data_in |>
+  pull(Bundesland) |>
+  unique() ->
+  bl_ordered
+data_in |>
+  mutate(Bundesland=factor(Bundesland,levels=bl_ordered)) -> data_in
+offset <- 0.1
+```
+
+
+```{r}
+data_in |>
+  ggplot() +
+  geom_mosaic(aes(x=product(Altersgruppe,Jahr,Bundesland),
+                  fill=Altersgruppe,
+                  weight=pop),
+              divider=c("vspine","hspine","hspine"),
+              show.legend=TRUE,
+              offset=0.01) +
+  
+scale_x_productlist("Bundesland",
+                    breaks=label_positions(xxx,Bundesland,pop,0.01),
+                      labels=data_in |>
+                        pull(Bundesland) |>
+                        unique())  +
+  
+  theme_date_vert() +
+  theme(legend.position = "bottom")
+```
+
+
+```{r}
+pop_deaths_aut_ger_agegroup_weekly  |>
+  filter(Land=="Österreich") |>
+  filter(Woche==1) |>
+  arrange(Gebiet,Bundesland) |>
+  select(-Woche) ->
+  data_in
+
+data_in |>
+  pull(Bundesland) |>
+  unique() ->
+  bl_ordered
+data_in |>
+  mutate(Bundesland=factor(Bundesland,levels=bl_ordered)) -> data_in
+offset <- 0.1
+```
+
+
+```{r}
+data_in |>
+  ggplot() +
+  geom_mosaic(aes(x=product(Altersgruppe,Jahr,Bundesland),
+                  fill=Altersgruppe,
+                  weight=pop),
+              divider=c("vspine","hspine","hspine"),
+              show.legend=TRUE,
+              offset=0.01) +
+  scale_x_productlist("Bundesland",
+                    breaks=label_positions(
+                      data_in,Bundesland,pop,0.01),
+                      labels=data_in |>
+                        pull(Bundesland) |>
+                        unique())  +
+  
+  theme_date_vert() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+pop_deaths_aut_ger_agegroup_weekly  |>
+  filter(Woche==1) |>
+  arrange(Gebiet,Bundesland) |>
+  group_by(Gebiet,Jahr,Altersgruppe) |>
+  summarise(pop=sum(pop)) |>
+  ungroup() ->
+  data_in
+
+data_in |>
+  pull(Gebiet) |>
+  unique() ->
+  bl_ordered
+data_in |>
+  mutate(Gebiet=factor(Gebiet,levels=bl_ordered)) -> data_in
+offset <- 0.1
+```
+
+
+```{r}
+data_in |>
+  ggplot() +
+  geom_mosaic(aes(x=product(Altersgruppe,Jahr,Gebiet),
+                  fill=Altersgruppe,
+                  weight=pop),
+              divider=c("vspine","hspine","hspine"),
+              show.legend=TRUE,
+              offset=0.01) +
+  scale_x_productlist("Gebiet",
+                    breaks=label_positions(
+                      data_in,Gebiet,pop,0.01),
+                      labels=data_in |>
+                        pull(Gebiet) |>
+                        unique())  +
+  
+  theme_date_vert() +
+  theme(legend.position = "bottom")
+
+```
+
