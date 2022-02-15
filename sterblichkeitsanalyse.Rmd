@@ -103,16 +103,71 @@ names(pal_complete) <- c("Deutschland-Ost","Deutschland-West",
 ```
 
 ```{r}
-raw_data_path <-
-  path(here(),"data","aut_ger","raw_data")
-```
-
-```{r}
 with_thousands <-
   function(x){
     prettyNum(x,big.mark = ".", decimal.mark = ",")
   }
 ```
+
+```{r}
+year_period <-
+  function(Jahr,Woche){
+    ifelse(Woche >= 27,Jahr,Jahr-1)
+  }
+
+combined_period <-
+  function(Jahr,Woche){
+    paste(year_period(Jahr,Woche),
+          year_period(Jahr,Woche)+1,sep="-")
+  }
+
+week_period <-
+  function(Jahr,Woche){
+    ifelse(Woche > 26, Woche-26, Woche + 26)
+  }
+```
+
+
+
+```{r}
+label_positions <-
+  function(data,group_var,var_to_sum,offset=0.01){
+    data |>
+      group_by({{group_var}}) |>
+      summarise(result=sum({{var_to_sum}})) |>
+      ungroup() |>
+      mutate(result=result+sum(result)*
+               offset*c(1/2,rep(1,length(result)-2),1/2)) |>
+      mutate(result=cumsum(result/sum(result)))|>
+      mutate(left_point=lag(result)) |>
+      replace_na(list(left_point=0)) |>
+      mutate(result=(result+left_point)/2) |>
+      pull(result)
+  }
+```
+
+
+```{r}
+#pop_deaths_aut_ger_agegroup_weekly |>
+#    mutate(Jahr_neu = 
+#           ifelse(Jahr == 2020 & Woche == 53, 2021,
+#             ifelse(Jahr == 2021 & Woche == 52, 2022,
+#             Jahr)),
+#         Woche_neu=
+#           ifelse(Jahr == 2020 & Woche == 53, 1,
+#                  ifelse(Jahr == 2021 & Woche == 52,1,
+#                         ifelse(Jahr==2021,Woche+1,Woche)))) |>
+#  filter(Jahr_neu < 2022) |>
+#  mutate(Jahr=Jahr_neu,
+#         Woche=Woche_neu) |>
+#
+#  mutate(Periode=combined_period(Jahr,Woche),
+#         Woche_period=week_period(Jahr,Woche),
+#         Periodenjahr=year_period(Jahr,Woche)) |>
+#  select(Jahr,Woche,Periode,Woche_period,Periodenjahr) ->
+#  complete_data_weekly_agegroups_regions_bl
+```
+
 
 ```{r}
 theme_border <- function(){
@@ -133,22 +188,47 @@ load(path(data_path,
 ```
 
 
-
 ```{r}
-complete_data_weekly_regions_bl |>
-  mutate(Periodenjahr=year_period(Jahr,Woche),
-         Woche_periode=week_period(Jahr,Woche),
-         Periode=period_combined(Jahr,Woche))
+pop_deaths_aut_ger_agegroup_weekly |>
+    mutate(Jahr_neu = 
+           ifelse(Jahr == 2020 & Woche == 53, 2021,
+             ifelse(Jahr == 2021 & Woche == 52, 2022,
+             Jahr)),
+         Woche_neu=
+           ifelse(Jahr == 2020 & Woche == 53, 1,
+                  ifelse(Jahr == 2021 & Woche == 52,1,
+                         ifelse(Jahr==2021,Woche+1,Woche)))) |>
+  filter(Jahr_neu < 2022) |>
+  mutate(Jahr=Jahr_neu,
+         Woche=Woche_neu) |>
+  
+  mutate(Periode=combined_period(Jahr,Woche),
+         Woche_period=week_period(Jahr,Woche),
+         Periodenjahr=year_period(Jahr,Woche)) |>
+  select(Land,Gebiet,Bundesland,
+         Jahr,Woche,Periode,Woche_period,Periodenjahr,Datum,
+         Altersgruppe,pop,Tote) ->
+  complete_data_weekly_agegroup_regions_bl
 ```
 
 ```{r}
-complete_data_weekly_regions_bl |>
+#complete_data_weekly_agegroup_regions_bl |>
+#  select(Jahr,Woche,Periode,Woche_period,Periodenjahr) |>
+#  distinct()
+```
+
+```{r}
+complete_data_weekly_agegroup_regions_bl |>
   bind_rows(
-    complete_data_weekly |>
+    complete_data_weekly_agegroup_regions_bl |>
       filter(Land=="Deutschland") |>
       mutate(Gebiet="Deutschland-Gesamt")
   )  ->
   complete_data_weekly
+```
+
+```{r}
+#complete_data_weekly |> tail()
 ```
 
 ```{r}
@@ -208,41 +288,47 @@ chart_aut_ger_weekly +
 ```
 
 ```{r}
-complete_data_weekly |>
-  filter(!(Gebiet %in% regions_ger)) |>
-  mutate(Jahr_neu = 
-           ifelse(Jahr == 2020 & Woche == 53, 2021,
-             ifelse(Jahr == 2021 & Woche == 52, 2022,
-             Jahr)),
-         Woche_neu=
-           ifelse(Jahr == 2020 & Woche == 53, 1,
-                  ifelse(Jahr == 2021 & Woche == 52,1,
-                         ifelse(Jahr==2021,Woche+1,Woche)))) |>
-  filter(Jahr_neu < 2022) |>
-  mutate(Jahr=Jahr_neu,
-         Woche=Woche_neu) |>
-  select(-Jahr_neu,-Woche_neu) ->
-complete_data_weekly_mod
+#complete_data_weekly |>
+#  filter(!(Gebiet %in% regions_ger)) |>
+#  mutate(Jahr_neu = 
+#           ifelse(Jahr == 2020 & Woche == 53, 2021,
+#             ifelse(Jahr == 2021 & Woche == 52, 2022,
+#             Jahr)),
+#         Woche_neu=
+#           ifelse(Jahr == 2020 & Woche == 53, 1,
+#                 ifelse(Jahr == 2021 & Woche == 52,1,
+#                         ifelse(Jahr==2021,Woche+1,Woche)))) |>
+#  filter(Jahr_neu < 2022) |>
+#  mutate(Jahr=Jahr_neu,
+#         Woche=Woche_neu) |>
+#  select(-Jahr_neu,-Woche_neu) ->
+#complete_data_weekly_mod
 ```
 
 ```{r}
-complete_data_weekly_mod |>
+complete_data_weekly |>
   group_by(Land,Gebiet,Jahr,Altersgruppe,Woche) |>
   summarise_at(vars(pop,Tote),sum) |>
-  summarise(Tote=sum(Tote),pop=mean(pop)) |>
   ungroup() |>
+  mutate(pop=as.integer(pop)) |>
+  arrange(Land,Gebiet,Jahr,Altersgruppe,Woche) |>
+  group_by(Land,Gebiet,Jahr,Altersgruppe) |>
+  summarise(Tote=sum(Tote),pop_mean=mean(pop),
+            pop_start=first(pop)) |>
+  ungroup() |>
+  rename(pop=pop_mean) |>
   mutate(Tote_mio=1000000*Tote/pop) ->
-  complete_data_yearly_mod
+  complete_data_yearly
 ```
 
 ```{r}
-complete_data_weekly_mod |>
+complete_data_weekly |>
 group_by(Land,Jahr,Woche) |>
   summarise_at(vars(pop,Tote),sum) |>
   summarise(pop=mean(pop),Tote=sum(Tote)) |>
   ungroup() |>
   mutate(Tote_mio=1000000*Tote/pop) ->
-  deaths_mio_aut_ger_yearly_mod
+  deaths_mio_aut_ger_yearly
 ```
 
 ### Sterbefälle jährlich
@@ -257,7 +343,7 @@ Zur Berechnung der Sterbefälle pro Million Einwohner verwenden wir die durchsch
 Mit dieser Modifikation betragen die jährlichen Sterbefallzahlen
 
 ```{r}
-deaths_mio_aut_ger_yearly_mod |>
+deaths_mio_aut_ger_yearly |>
   select(Land,Jahr,Tote_mio) |>
   pivot_wider(names_from=Land,
               values_from=Tote_mio) |>
@@ -269,7 +355,7 @@ deaths_mio_aut_ger_yearly_mod |>
 Grafisch dargestellt sieht das so aus:
 
 ```{r}
-deaths_mio_aut_ger_yearly_mod |>
+deaths_mio_aut_ger_yearly |>
   select(Jahr,Land,Tote_mio) |>
   ggplot(aes(x=Jahr,y=Tote_mio,color=Land)) +
   geom_line() +
@@ -306,7 +392,7 @@ c("Deutschland_0-65"="D",
 ```
 
 ```{r}
-complete_data_yearly_mod |>
+complete_data_yearly |>
   filter(!(Gebiet %in% regions_ger)) |>
   select(-Gebiet,-Tote,-pop) |>
   arrange(Altersgruppe,Land) |>
@@ -330,7 +416,7 @@ Die Sterberate der Gruppe 65-75 ist ungefähr 7-8-mal so groß wie die Sterberat
 In einer Grafik sieht das so aus:
 
 ```{r}
-complete_data_yearly_mod |>
+complete_data_yearly |>
   filter(!(Gebiet %in% regions_ger)) |>
   select(-Gebiet,-Tote,-pop) |>
   arrange(Altersgruppe,Land) |>
@@ -351,7 +437,7 @@ Die Größenunterschiede machen es nahezu unmöglich, den zeitlichen Verlauf bei
 Deswegen stellen wir diese Daten noch einmal dar, und zwar mit verschiedenen senkrechten Skalen bei den einzelnen Altersgruppen.
 
 ```{r}
-complete_data_yearly_mod |>
+complete_data_yearly |>
   filter(!(Gebiet %in% regions_ger)) |>
   select(-Gebiet,-Tote,-pop) |>
   arrange(Altersgruppe,Land) |>
@@ -378,7 +464,7 @@ Dazu sehen wir uns zunächst den zeitlichen Verlauf der Zusammensetzung der Bev�
 ### Altersstruktur
 
 ```{r}
-complete_data_weekly_mod |>
+complete_data_weekly |>
   filter(Woche==1) |>
   group_by(Land,Jahr,Altersgruppe) |>
   summarise(pop=sum(pop)) |>
@@ -411,19 +497,36 @@ Der Anteil der Altersgruppe 85- steigt in Deutschland, in Österreich bleibt er 
 
 Grafisch dargestellt sieht die Entwicklung der Bevölkerungsstruktur so aus:
 
+
+
+
+
 ```{r}
-complete_data_weekly_mod |>
-  filter(Woche==1) |>
-  group_by(Land,Jahr,Altersgruppe) |>
-  summarise(pop=sum(pop)) |>
-  ungroup() |>
+#complete_data_weekly |>
+#  filter(Woche==1) |>
+#  group_by(Land,Jahr,Altersgruppe) |>
+#  summarise(pop=sum(pop)) |>
+#  ungroup() |>
+```
+
+
+```{r}
+complete_data_yearly |>
   ggplot() +
   geom_mosaic(aes(product(Altersgruppe,Jahr,Land),
-                  weight=pop,
+                  weight=pop_start,
                   fill=Altersgruppe),
               divider=c("vspine",rep("hspine",2))) +
+  scale_x_productlist(breaks = 
+                        label_positions(
+                          complete_data_yearly,
+                          Land,pop_start
+                        ),
+                      labels=c("Deutschland",
+                               "Österreich"))+
   guides(fill=guide_legend(reverse=TRUE)) +
-  theme_date_vert()  ->
+  theme_date_vert() +
+    theme(legend.position = "bottom") ->
   chart
 make_chart_html(
   chart
@@ -441,7 +544,7 @@ Dieser Anteil steigt im Laufe der Zeit, bleibt aber trotzdem niedriger als in De
 Wir wollen jetzt den demografischen Wandel „herausrechnen" und berechnen jene Gesamtsterberaten, die sich ergäben, wenn die Altersstruktur der Bevölkerung sich nicht ändern würde. Wir verwenden als Standardbevölkerung dazu zunächst in beiden Ländern die jeweilige Altersstruktur von 2021.
 
 ```{r}
-complete_data_weekly_mod |>
+complete_data_weekly |>
   filter(!(Gebiet %in% regions_ger)) |>
   select(-Gebiet) |>
   select(Land,Altersgruppe,Jahr,Woche,pop) |>
@@ -464,7 +567,7 @@ complete_data_weekly_mod |>
 Mit dieser Altersstruktur erhalten wir folgende Sterberaten:
 
 ```{r}
-complete_data_weekly_mod |>
+complete_data_weekly |>
   filter(!(Gebiet %in% regions_ger)) |>
   select(-Gebiet) |>
   select(Land,Altersgruppe,Jahr,Woche,Datum,pop,Tote) |>
@@ -480,11 +583,11 @@ complete_data_weekly_mod |>
   summarise(Tote=sum(Tote),pop=sum(pop)) |>
   ungroup() |>
   mutate(Tote_mio=1000000*Tote/pop) ->
-  complete_data_weekly_mod_pop_2021
+  complete_data_weekly_pop_2021
 ```
 
 ```{r}
-complete_data_weekly_mod_pop_2021 |>
+complete_data_weekly_pop_2021 |>
   ggplot(aes(x=Datum,y=Tote_mio,color=Land)) +
   geom_line() +
   scale_x_date("Jahr", breaks="1 year",label=year) +
@@ -501,7 +604,7 @@ Ein Vergleich mit den nicht altersbereinigten Daten sieht so aus:
 
 ```{r}
 pal_typ <- c(altersbereingt="solid",unbereinigt="dotted")
-complete_data_weekly_mod |>
+complete_data_weekly |>
   filter(!(Gebiet %in% regions_ger)) |>
   select(-Gebiet) |>
   select(Land,Jahr,Woche,Datum,pop,Tote) |>
@@ -511,7 +614,7 @@ complete_data_weekly_mod |>
   mutate(Tote_mio=1000000*Tote/pop) |>
   select(Land,Jahr,Woche,Datum,Tote_mio) |>
   mutate(Berechnung="unbereinigt") |>
-  bind_rows(complete_data_weekly_mod_pop_2021|>
+  bind_rows(complete_data_weekly_pop_2021|>
               mutate(Berechnung="altersbereinigt")) ->
   pop_deaths_weekly_mixed
 ```
@@ -610,32 +713,9 @@ Wir wollen im Folgenden Perioden von Kalenderwoche 27 bis zur Kalenderwoche 26 d
 
 Diese Perioden sind 52 Wochen lang, fallen aber immer in 2 Kalenderjahre.
 
-```{r}
-year_period <-
-  function(Jahr,Woche){
-    case_when(
-      Woche <= 26 ~ Jahr-1,
-      TRUE ~ Jahr
-    )
-  }
-
-period_combined <- 
-  function(Jahr,Woche){
-    year_period(Jahr,Woche) |>
-    (\(x)paste(x,x+1,sep="-"))()
-  }  
-week_period <-
-  function(Jahr,Woche){
-    case_when(
-      Woche <= 26 ~ Woche+26,
-      TRUE ~ Woche-26
-    )
-  }
-  
-```
 
 ```{r}
-complete_data_weekly_mod |> 
+complete_data_weekly |> 
   mutate(
     Periodenjahr=year_period(Jahr,Woche),
     Periode = period_combined(Jahr,Woche),
@@ -645,13 +725,13 @@ complete_data_weekly_mod |>
            Periode,Woche_period,Datum) |>
   summarise_at(vars(pop,Tote),sum) |>
   ungroup() ->
-complete_data_weekly_mod_period  
+complete_data_weekly_period  
 ```
 
 ### Wöchentliche Sterbefalldaten mit Periodengliederung
 
 ```{r}
-complete_data_weekly_mod_period |>
+complete_data_weekly_period |>
   select(Periode,Woche_period,Datum) |>
   filter(Woche_period==1) |>
   distinct() |>
@@ -686,7 +766,7 @@ make_chart_html(
 ```
 
 ```{r}
-complete_data_weekly_mod_period |>
+complete_data_weekly_period |>
   group_by(Land,Gebiet,Periodenjahr,
            Periode,Altersgruppe,Woche_period) |>
   summarise_at(vars(pop,Tote),sum) |>
@@ -698,13 +778,13 @@ complete_data_weekly_mod_period |>
 
 
 ```{r}
-complete_data_weekly_mod_period |>
+complete_data_weekly_period |>
 group_by(Land,Gebiet,Periode,Periodenjahr,Woche_period) |>
   summarise_at(vars(pop,Tote),sum) |>
   summarise(pop=mean(pop),Tote=sum(Tote)) |>
   ungroup() |>
   mutate(Tote_mio=1000000*Tote/pop) ->
-  deaths_mio_aut_ger_period_mod
+  deaths_mio_aut_ger_period
 ```
 
 
@@ -731,8 +811,10 @@ pop_deaths_weekly_mixed |>
 Die folgende Tabelle zeigt die (nicht altersbereinigten) Sterbefallzahlen pro Million Einwohner in diesen Perioden.
 
 ```{r}
-deaths_mio_aut_ger_period_mod |>
+deaths_mio_aut_ger_period |>
+  filter(Gebiet %in% c("Deutschland-Gesamt","Österreich")) |>
   select(Land,Periode,Tote_mio) |>
+  distinct() |>
   pivot_wider(names_from=Land,
               values_from=Tote_mio) |>
   gt() |>
@@ -744,6 +826,7 @@ Grafisch dargestellt sieht die Entwicklung so aus:
 
 ```{r}
 deaths_mio_aut_ger_period_mod |>
+  filter(Gebiet %in% c("Deutschland-Gesamt","Österreich")) |>
   select(Periode,Periodenjahr,Land,Tote_mio) |>
   ggplot(aes(x=Periodenjahr,y=Tote_mio,color=Land)) +
   geom_line() +
@@ -763,21 +846,21 @@ Wir sehen hier deutlich den Anstieg der Sterbefallzahlen in der letzten Periode 
 Die Jahres-Sterberaten pro Altersgruppen in dieser Gliederung zeigt folgende Tabelle:
 
 ```{r}
-complete_data_weekly_mod_period |>
-#  filter(!(Gebiet %in% regions_ger)) |>
+complete_data_weekly_period |>
+  filter(!(Gebiet %in% regions_ger)) |>
   select(Land,Gebiet,Altersgruppe,Periode,Periodenjahr,Woche_period,
          pop,Tote) |>
   group_by(Land,Gebiet,Altersgruppe,Periodenjahr,Periode) |>
   summarise(pop=mean(pop),Tote=sum(Tote)) |>
   ungroup() |>
   mutate(Tote_mio=1000000*Tote/pop)->
-  complete_data_yearly_mod_period
+  complete_data_yearly_period
 ```
 
 ### Sterbefallzahlen in Altersgruppen und Perioden
 
 ```{r}
-complete_data_yearly_mod_period |>
+complete_data_yearly_period |>
   filter(!(Gebiet %in% regions_ger)) |>
   select(-Gebiet,-Tote,-pop,-Periodenjahr) |>
   arrange(Altersgruppe,Land) |>
@@ -797,6 +880,7 @@ complete_data_yearly_mod_period |>
 
 ```{r}
 complete_data_yearly_mod_period |>
+  filter(!(Gebiet %in% regions_ger)) |>
   select(-pop,-Tote) |>
   left_join(pop_aut_ger_agegroup_2021) |>
   mutate(Tote_mio=Tote_mio*pop_anteil) |>
@@ -820,7 +904,8 @@ Die nächste Tabelle vergleicht Sterbefallzahlen über Perioden hinweg mit und o
 deaths_aut_ger_agegroup_period_weigthed |>
   mutate(Berechnung="altersbereinigt") |>
   bind_rows(
-    deaths_mio_aut_ger_period_mod  |>
+    deaths_mio_aut_ger_period  |>
+      filter(!(Gebiet %in% regions_ger)) |>
       select(Land,Periodenjahr,Periode,Tote_mio) |>
       mutate(Berechnung="unbereinigt")
   ) -> deaths_aut_ger_agegroup_mixed
@@ -896,24 +981,6 @@ pop_bl_dec21 |>
 ```
 
 
-```{r}
-label_positions <-
-  function(data,group_var,var_to_sum,offset=0.01){
-    data |>
-      group_by({{group_var}}) |>
-      summarise(result=sum({{var_to_sum}})) |>
-      ungroup() |>
-      mutate(result=result+sum(result)*
-               offset*c(1/2,rep(1,length(result)-2),1/2)) |>
-      mutate(result=cumsum(result/sum(result)))|>
-      mutate(left_point=lag(result)) |>
-      replace_na(list(left_point=0)) |>
-      mutate(result=(result+left_point)/2) |>
-      pull(result)
-  }
-```
-
-
 
 ```{r}
 pop_deaths_aut_ger_agegroup_weekly  |>
@@ -944,13 +1011,15 @@ data_in |>
               offset=0.01) +
   
 scale_x_productlist("Bundesland",
-                    breaks=label_positions(xxx,Bundesland,pop,0.01),
+                    breaks=label_positions(data_in,Bundesland,pop,0.01),
                       labels=data_in |>
                         pull(Bundesland) |>
                         unique())  +
   
   theme_date_vert() +
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom") ->
+  chart
+make_chart_html(chart)
 ```
 
 
@@ -989,7 +1058,9 @@ data_in |>
                         unique())  +
   
   theme_date_vert() +
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom") ->
+  chart
+make_chart_html(chart)
 ```
 
 ```{r}
@@ -1026,8 +1097,8 @@ data_in |>
                       labels=data_in |>
                         pull(Gebiet) |>
                         unique())  +
-  
-  theme_date_vert() +
+  theme_minimal()  +
+#  theme_date_vert() +
   theme(legend.position = "bottom")
 
 ```
