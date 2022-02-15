@@ -718,7 +718,7 @@ Diese Perioden sind 52 Wochen lang, fallen aber immer in 2 Kalenderjahre.
 complete_data_weekly |> 
   mutate(
     Periodenjahr=year_period(Jahr,Woche),
-    Periode = period_combined(Jahr,Woche),
+    Periode = combined_period(Jahr,Woche),
          Woche_period=week_period(Jahr,Woche)) |>
   filter(!(Periode %in% c("2015-2016","2021-2022"))) |>
   group_by(Land,Gebiet,Altersgruppe,Jahr,Woche,Periodenjahr,
@@ -793,7 +793,7 @@ Legt man die Kurven der Sterbefallzahlen pro Periode auf einer gemeinsamen Zeits
 
 ```{r}
 pop_deaths_weekly_mixed |>
-  mutate(Periode=period_combined(Jahr,Woche),
+  mutate(Periode=combined_period(Jahr,Woche),
          Woche_period=week_period(Jahr,Woche)) |>
   select(-Tote,-pop) |>
   filter(!(Periode %in% c("2015-2016","2021-2022"))) |>
@@ -825,7 +825,7 @@ deaths_mio_aut_ger_period |>
 Grafisch dargestellt sieht die Entwicklung so aus:
 
 ```{r}
-deaths_mio_aut_ger_period_mod |>
+deaths_mio_aut_ger_period |>
   filter(Gebiet %in% c("Deutschland-Gesamt","Österreich")) |>
   select(Periode,Periodenjahr,Land,Tote_mio) |>
   ggplot(aes(x=Periodenjahr,y=Tote_mio,color=Land)) +
@@ -952,6 +952,8 @@ make_chart_html(
 )
 ```
 
+
+
 Wir sehen, dass die Altersbereinigung die Sterbefallzahlen in Österreich kaum ändert.
 
 In Deutschland sind die altersbereinigten Sterbefallzahlen etwas höher als die unbereinigten.
@@ -961,6 +963,10 @@ In beiden Ländern sehen wir aber einen deutlichen Anstieg der Sterbefallzahlen 
 
 
 ## Altersstruktur-Veränderung in den Bundesländern
+
+
+Als nächstes untersuchen wir die zeitliche Entwicklung der Altersstruktur allen Bundesländern Deutschlands und Österreichs im Zeitraum 2016 bis 2021.
+
 
 ```{r}
 pop_deaths_aut_ger_agegroup_weekly |>
@@ -1022,6 +1028,8 @@ scale_x_productlist("Bundesland",
 make_chart_html(chart)
 ```
 
+In allen 5 neuen Bundesländern steigt der Anteil der Älteren. In den 11 alten Bundesländern ist das nur in Saarland ähnlich ausgeprägt zu beobachten.
+
 
 ```{r}
 pop_deaths_aut_ger_agegroup_weekly  |>
@@ -1063,6 +1071,9 @@ data_in |>
 make_chart_html(chart)
 ```
 
+In Österreich ist die Zunahme der älteren Bevölkerungsgruppe im Burgenland und in Kärnten, Salzburg und Vorarlberg zu beobachten, allerdings nicht so stark ausgeprägt wie in den neuen Bundesländern in Deutschland.  
+
+
 ```{r}
 pop_deaths_aut_ger_agegroup_weekly  |>
   filter(Woche==1) |>
@@ -1081,6 +1092,7 @@ data_in |>
 offset <- 0.1
 ```
 
+Untersuchen wir die Veränderungen der Altersstruktur in der gröberem Einteilung Deutschland-Ost, Deutschland-West und Österreich, dann erhalten wir folgendes Bild:
 
 ```{r}
 data_in |>
@@ -1094,12 +1106,341 @@ data_in |>
   scale_x_productlist("Gebiet",
                     breaks=label_positions(
                       data_in,Gebiet,pop,0.01),
-                      labels=data_in |>
-                        pull(Gebiet) |>
-                        unique())  +
+                      labels= bl_ordered)  +
   theme_minimal()  +
 #  theme_date_vert() +
   theme(legend.position = "bottom")
 
 ```
+
+In Deutschland-Ost ist der Anteil der Älteren die ganze Zeit hindurch höher als in Deutschland-West und nimmt im Verlauf der Zeit noch zu.
+
+In Deutschland-West ändert sich die Altersstruktur nicht.
+
+In Österreich ist der Anteil der Älteren die ganze Zeit hindurch kleiner als in Deutschland-West, nimmt aber im Laufe der Zeit etwas zu.
+
+### Wöchentliche Todesfallzahlen bundesländerweise trendbereinigt
+
+
+Wir berechnen jetzt alterstrendbereinigte Sterbefallzahlen. Dazu berechnen wir in allen Bundesländern einzeln (fiktive) Gesamtsterbefallzahlen mit der Altersstruktur von 2020, um so die Verschiebung der Altersstruktur herauszurechnen.
+
+
+```{r}
+pop_deaths_aut_ger_agegroup_weekly |>
+  filter(Jahr==max(Jahr)) |>
+  filter(Woche==max(Woche)) |>
+  select(Land,Gebiet,Bundesland,Altersgruppe,pop) ->
+  pop_bl_agegroup_2020
+```
+
+```{r}
+pop_bl_agegroup_2020 |>
+#  filter(Gebiet %in%  c("Deutschland-Gesamt","Österreich")) |>  
+  arrange(Land,Gebiet,Bundesland) |>
+  group_by(Land) |>
+  ungroup() |>
+  rename(pop_2020=pop) ->
+  weights_bl
+weights_bl
+
+#weights_country
+```
+
+
+```{r}
+#weights_bl |>
+#  group_by(Land) |>
+#  summarise(sum(pop_anteil),sum(pop_2020))
+```
+
+
+```{r}
+pop_deaths_aut_ger_agegroup_weekly |>
+  mutate(death_rate=Tote/pop) |>
+  left_join(weights_bl) |>
+  select(Land,Gebiet,Bundesland,Jahr,Woche,Altersgruppe,
+         Tote,pop,pop_2020,everything()) |>
+  arrange(Land,Gebiet,Bundesland,Jahr,Woche,Datum,Altersgruppe) |>
+  mutate(Tote_neu=Tote/pop*pop_2020) |>
+  select(Land:Tote,Tote_neu,everything(),Datum) ->
+  deaths_pop_country_mixed_weekly
+
+deaths_pop_country_mixed_weekly |>
+  group_by(Land,Jahr,Woche,Datum) |>
+  summarise_at(vars(Tote,pop,Tote_neu,pop_2020),sum) |>
+  ungroup() |>
+  mutate(unbereinigt=1000000*Tote/pop,
+         altersbereinigt=1000000*Tote_neu/pop_2020) |>
+  select(Land,Jahr,Woche,Datum,unbereinigt,altersbereinigt) ->
+  deaths_mio_country
+```
+
+```{r}
+deaths_mio_country |>
+  pivot_longer(cols = unbereinigt:altersbereinigt,
+               names_to="Berechnung",
+               values_to="Tote_mio") |>
+  ggplot(aes(x=Datum,y=Tote_mio,color=Land,
+             linetype=Berechnung)) +
+  geom_line() +
+  scale_x_date("Jahr", breaks="1 year",label=year) +
+  scale_y_continuous(y_title,limits=c(0,NA)) +
+  scale_color_manual(values=pal_aut_ger) +
+  theme_minimal()  
+```
+
+
+Die Unterschiede zwischen den unbereinigten und den altersbereinigten Zahlen sind im wöchentlichen Verlauf bis 2019 merkbar. 
+
+### Jährliche bereinigte Todesfallzahlen.
+
+Im folgenden verwenden wir als Einteilung der Zeit wieder die Perioden von Anfang Juli bis Ende Juni des Folgejahres, weil wir so ganze Infektionswellen immer in einer Periode einfangen.
+
+Berechnen wir die Sterblichkeit pro Periode mit dieser Gewichtung, dann ist der Effekt der Bereinigung klarer sichtbar. 
+
+```{r}
+deaths_pop_country_mixed_weekly |>
+  mutate(Periodenjahr=year_period(Jahr,Woche),
+         Periode=combined_period(Jahr,Woche)) |>
+  group_by(Land,Periode,Periodenjahr,Woche) |>
+  summarise_at(vars(Tote,pop,Tote_neu,pop_2020),sum) |>
+  summarise(Tote=sum(Tote),pop=mean(pop),
+            Tote_neu=sum(Tote_neu),pop_2020=mean(pop_2020)) |>
+  ungroup() |>
+  mutate(unbereinigt=1000000*Tote/pop,
+         altersbereinigt=1000000*Tote_neu/pop_2020) |>
+  select(Land,Periode,Periodenjahr,unbereinigt,altersbereinigt) |>
+  filter(Periodenjahr > 2015) |>
+  filter(Periodenjahr < 2021) ->
+  deaths_mio_country_yearly
+#  deaths_mio_country_yearly
+```
+
+```{r}
+deaths_mio_country_yearly |>
+  pivot_longer(cols=unbereinigt:altersbereinigt,
+        names_to="Berechnung",
+        values_to="Tote_mio") |>
+ ggplot(aes(x=Periodenjahr,y=Tote_mio,color=Land,linetype=Berechnung)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(y_title,limits=c(0,NA),
+                     labels=with_thousands) +
+  scale_x_continuous("Periode",label=\(x)paste(x,x+1,sep="-")) +
+  scale_color_manual(values=pal_aut_ger) +
+#  scale_linetype(values=pal_typ) |>
+  theme_minimal() ->
+  chart
+make_chart_html(
+  chart
+)
+```
+Bei den unbereinigten Sterbefallzahlen sehen wir in Deutschland bis 2019-2020 kaum Zu- oder Abnahmen, von 219-2020 bis 2020-2021 gibt es einen deutlichen Anstieg. Bei den bereinigten Zahlen sehen, dass die Werte 2016-2017 und 2017-2018 annähernd gleich hoch waren. Um die Jahreswende 2016-2017 und zu Beginn des Jahres 2018 gab es jeweils ein Grippewelle. In den beiden Perioden danach gab es keine so starken Infektionswellen, die Zahlen sind etwas niedriger. Um die Jahreswende 2020-2021 gab es dann die COVID-Welle, und das ist in den Kurven deutlich sichtbar. Die Altersbereinigung macht also deutlicher sichtbar, welche Auswirkungen die beiden Grippewellen hatten.
+
+In Österreich ist der Unterschied zwischen unbereinigten und altersbereinigten Zahlen kaum merkbar. Wir sehen in beiden Kurven den deutlichen Anstieg durch die COVID-Wellen. Wir sehen auch, dass - anders als in Deutschland - die Grippewelle zum Jahresanfang 2018 weniger ausgeprägt war die um die Jahreswende 2016-2017.
+
+
+### Wöchentliche Todesfallzahlen gebietsweise trendbereinigt
+
+Im Folgenden berechnen wir unbereinigte und altersbereinigte Sterbefallzahlen getrennt für Deutschland-Ost, Deutschland-West und Österreich. Wir verwenden zur Altersbereinigung - anders als im vorigen Abschnitt - die Altersstruktur dieser Gebiet ohne weiter Differenzierung in Bundesländer.
+
+
+```{r}
+deaths_pop_country_mixed_weekly |>
+  bind_rows(deaths_pop_country_mixed_weekly |>
+              filter(Land=="Deutschland") |>
+              mutate(Gebiet="Deutschland-Gesamt")) ->
+  deaths_pop_gebiet_mixed_weekly 
+  deaths_pop_gebiet_mixed_weekly |>
+  group_by(Land,Gebiet,Jahr,Woche,Datum) |>
+  summarise_at(vars(Tote,pop,Tote_neu,pop_2020),sum) |>
+  ungroup() |>
+  mutate(unbereinigt=1000000*Tote/pop,
+         altersbereinigt=1000000*Tote_neu/pop_2020) |>
+  select(Gebiet,Jahr,Woche,Datum,unbereinigt,altersbereinigt) ->
+  deaths_mio_gebiet
+```
+
+
+
+```{r}
+deaths_mio_gebiet |>
+  pivot_longer(cols = unbereinigt:altersbereinigt,
+               names_to="Berechnung",
+               values_to="Tote_mio") |>
+  ggplot(aes(x=Datum,y=Tote_mio,color=Gebiet,
+             linetype=Berechnung)) +
+  geom_line() +
+  scale_x_date("Jahr", breaks="1 year",label=year) +
+  scale_y_continuous(y_title,limits=c(0,NA)) +
+  scale_color_manual(values=pal_complete) +
+  theme_minimal()  
+```
+
+Die größten Unterschiede zwischen den unbereinigten und altersbereinigten sind in Deutschland-Ost am Anfang des Analysezeitraums festzustellen.
+
+Das ist nicht weiter überraschend, in diesem Gebiet war die Zunahme des älteren Teils der Bevölkerung am ausgeprägtesten.
+
+### Wöchentliche Todesfälle gewichtet mit Altersverteilung Deutschland- West
+
+Um die Unterschiede der Altersstruktur in den untersuchten Gebieten herauszurechnen, führen wir noch einen weiteren Analyseschritt durch.
+
+Wir berechnen die Gesamtsterblichkeit in allen 3 Gebieten, verwenden aber überall die Altersstruktur aus Deutschland-West 2021. 
+
+
+```{r}
+pop_bl_agegroup_2020 |>
+#  filter(Gebiet %in%  c("Deutschland-Gesamt","Österreich")) |>  
+  filter(Gebiet=="Deutschland-West") |>
+  group_by(Altersgruppe) |>
+  summarise(pop=sum(pop)) |>
+  ungroup() |>
+  rename(pop_2020=pop) ->
+  weights_ger_west
+```
+
+
+```{r}
+deaths_pop_country_mixed_weekly |>
+  rename(Tote_reg=Tote_neu,
+         pop_reg=pop_2020) |>
+  left_join(weights_ger_west) |>
+#  bind_Rowdys(deaths_pop_country_mixe_wehklage |>
+#              filter(Land=="Deutschland") |>
+#              mutete(Gebiet="Deutschland-Gesamt")) ->
+  mutate(Tote_neu=Tote/pop*pop_2020) ->
+  deaths_pop_gebiet_mixed_weekly_ger_west 
+  deaths_pop_gebiet_mixed_weekly_ger_west |>
+  group_by(Land,Gebiet,Jahr,Woche,Datum) |>
+  summarise_at(vars(Tote,pop,Tote_neu,pop_2020),sum) |>
+  ungroup() |>
+  mutate(unbereinigt=1000000*Tote/pop,
+         altersbereinigt=1000000*Tote_neu/pop_2020) |>
+  select(Gebiet,Jahr,Woche,Datum,unbereinigt,altersbereinigt) ->
+  deaths_mio_gebiet
+```
+### Wöchentliche Sterbefallzahlen gewichtet mit Altersverteilung Deutschland-West
+
+
+```{r}
+deaths_mio_gebiet |>
+  pivot_longer(cols = unbereinigt:altersbereinigt,
+               names_to="Berechnung",
+               values_to="Tote_mio") |>
+  filter(Gebiet != "Deutschland-Gesamt") |>
+  ggplot(aes(x=Datum,y=Tote_mio,color=Gebiet,
+             linetype=Berechnung)) +
+  geom_line() +
+  scale_x_date("Jahr", breaks="1 year",label=year) +
+  scale_y_continuous(y_title,limits=c(0,NA)) +
+  scale_color_manual(values=pal_complete) +
+  theme_minimal()  
+```
+
+Diese Grafik ist etwas überladen. Wir sehen aber auf jeden Fall,
+das die Verwendung einheitlicher Zahlen in Deutschland West zu niedrigeren und in Österreich zu höheren Zahlen führt.
+
+Da Deutschland-Ost den höchsten und Österreich den niedrigsten Anteil
+Älterer hat und die Sterblichkeit bei den Älteren höher ist als bei den Jüngeren, ist diese Verschiebung nicht weiter überraschend.
+
+Die nächste Grafik zeigt nur die altersbereinigten Kurven der 3 Regionen.
+
+```{r}
+deaths_mio_gebiet |>
+  pivot_longer(cols = unbereinigt:altersbereinigt,
+               names_to="Berechnung",
+               values_to="Tote_mio") |>
+  filter(Gebiet != "Deutschland-Gesamt") |>
+  filter(Berechnung=="altersbereinigt") |>
+  ggplot(aes(x=Datum,y=Tote_mio,color=Gebiet,
+             linetype=Berechnung)) +
+  geom_line() +
+  scale_x_date("Jahr", breaks="1 year",label=year) +
+  scale_y_continuous(y_title,limits=c(0,NA)) +
+  scale_color_manual(values=pal_eastwest) +
+  theme_minimal()  
+```
+
+Wir erkennen, dass auch nach Umlegung der Sterbefallzahlen auf eine gemeinsame Altersstruktur Deutschland-Ost immer noch die höchste und Österreich die niedrigste hat. Diese Unterschiede sind bei COVID deutlicher ausgeprägt als bei den früheren Grippewellen.
+
+
+
+```{r}
+pop_deaths_aut_ger_agegroup_weekly |>
+  left_join(weights_ger_west) |>
+  select(Land,Gebiet,Bundesland,Jahr,Woche,Altersgruppe,
+         Tote,pop,pop_2020,everything()) |>
+  arrange(Land,Gebiet,Bundesland,Jahr,Woche,Datum,Altersgruppe) |>
+  mutate(Tote_neu=Tote/pop*pop_2020) |>
+  select(Land:Tote,Tote_neu,everything(),Datum) ->
+  deaths_pop_country_mixed_gerwest_weekly
+
+deaths_pop_country_mixed_gerwest_weekly |>
+  group_by(Land,Jahr,Woche,Datum) |>
+  summarise_at(vars(Tote,pop,Tote_neu,pop_2020),sum) |>
+  ungroup() |>
+  mutate(unbereinigt=1000000*Tote/pop,
+         altersbereinigt=1000000*Tote_neu/pop_2020) |>
+  select(Land,Jahr,Woche,Datum,unbereinigt,altersbereinigt) ->
+  deaths_mio_gebiet_gerwest
+```
+### Jährliche Sterbefallzahlen mit Gewichtung Deutschland-West 2021.
+
+Abschließend berechnen wir noch Sterbefallzahlen auf Grundlage der Bevölkerung Deutschland-West 2021 für unsere Jahreswenden inkludierenden Perioden.
+
+Diese Grafik bereinigt sowohl die verschiedene Altersstrukturen in den 3 Gebieten als auch die Änderung der Altersstrukturen im Laufe der Zeit.
+
+
+
+```{r}
+deaths_pop_country_mixed_weekly |>
+  mutate(Periodenjahr=year_period(Jahr,Woche),
+         Periode=combined_period(Jahr,Woche)) |>
+  rename(Tote_bl=Tote_neu,
+         pop_bl=pop_2020) |>
+  left_join(weights_ger_west) |>
+  mutate(Tote_neu=Tote*pop_2020/pop) |>
+  group_by(Gebiet,Periode,Periodenjahr,Woche) |>
+  summarise_at(vars(Tote,pop,Tote_neu,pop_2020),sum) |>
+  summarise(Tote=sum(Tote),pop=mean(pop),
+            Tote_neu=sum(Tote_neu),pop_2020=mean(pop_2020)) |>
+  ungroup() |>
+  mutate(unbereinigt=1000000*Tote/pop,
+         altersbereinigt=1000000*Tote_neu/pop_2020) |>
+  select(Gebiet,Periode,Periodenjahr,unbereinigt,altersbereinigt) |>
+  filter(Periodenjahr > 2015) |>
+  filter(Periodenjahr < 2021) ->
+  deaths_mio_gebiet_yearly
+#  deaths_mio_country_yearly
+```
+
+
+```{r}
+deaths_mio_gebiet_yearly |>
+  pivot_longer(cols=unbereinigt:altersbereinigt,
+        names_to="Berechnung",
+        values_to="Tote_mio") |>
+ ggplot(aes(x=Periodenjahr,y=Tote_mio,color=Gebiet,
+            linetype=Berechnung)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(y_title,limits=c(0,NA),
+                     labels=with_thousands) +
+  scale_x_continuous("Periode",label=\(x)paste(x,x+1,sep="-")) +
+  scale_color_manual(values=pal_eastwest) +
+#  scale_linetype(values=pal_typ) |>
+  theme_minimal() ->
+  chart
+make_chart_html(
+  chart
+)
+```
+
+In dieser Grafik sehen wir den Effekt der Standardisierung der Altersstruktur besonders deutlich. Die Kurve für Deutschland-West wird deutlich nach unten verschoben, und das ist im späteren Verlauf noch deutlicher ausgeprägt als zu Beginn.
+Die Kurve für Österreich wird etwas weniger nach oben verschoben.
+
+Mit diesen Zahlen können wir sagen, dass nach Konsolidierung der Altersgewichtung sowohl nach demografischen Unterschieden als auch durch Herausrechnen der zeitlichen Veränderungen in Deutschland-Ost höhere und Österreich niedrigere Sterblichkeit als in Deutschland-West
+zu beobachten ist. 
+
+Die Auswirkungen der COVID-Welle sind (wenn man mit der Periode davor vergleicht) in Deutschland-West aber definitiv niedriger als in Deutschland Ost und in Österreich.
 
