@@ -1119,7 +1119,7 @@ In Deutschland-West ändert sich die Altersstruktur nicht.
 
 In Österreich ist der Anteil der Älteren die ganze Zeit hindurch kleiner als in Deutschland-West, nimmt aber im Laufe der Zeit etwas zu.
 
-### Wöchentliche Todesfallzahlen bundesländerweise trendbereinigt
+### Wöchentliche Sterbefallzahlen bundesländerweise trendbereinigt
 
 
 Wir berechnen jetzt alterstrendbereinigte Sterbefallzahlen. Dazu berechnen wir in allen Bundesländern einzeln (fiktive) Gesamtsterbefallzahlen mit der Altersstruktur von 2020, um so die Verschiebung der Altersstruktur herauszurechnen.
@@ -1192,7 +1192,7 @@ deaths_mio_country |>
 
 Die Unterschiede zwischen den unbereinigten und den altersbereinigten Zahlen sind im wöchentlichen Verlauf bis 2019 merkbar. 
 
-### Jährliche bereinigte Todesfallzahlen.
+### Jährliche bereinigte Sterbefallzahlen.
 
 Im folgenden verwenden wir als Einteilung der Zeit wieder die Perioden von Anfang Juli bis Ende Juni des Folgejahres, weil wir so ganze Infektionswellen immer in einer Periode einfangen.
 
@@ -1240,7 +1240,9 @@ Bei den unbereinigten Sterbefallzahlen sehen wir in Deutschland bis 2019-2020 ka
 In Österreich ist der Unterschied zwischen unbereinigten und altersbereinigten Zahlen kaum merkbar. Wir sehen in beiden Kurven den deutlichen Anstieg durch die COVID-Wellen. Wir sehen auch, dass - anders als in Deutschland - die Grippewelle zum Jahresanfang 2018 weniger ausgeprägt war die um die Jahreswende 2016-2017.
 
 
-### Wöchentliche Todesfallzahlen gebietsweise trendbereinigt
+## Sterbesallzahlen trend- und gebietsweise bereinigt
+
+### Wöchentliche Sterbefallzahlen gebietsweise trendbereinigt
 
 Im Folgenden berechnen wir unbereinigte und altersbereinigte Sterbefallzahlen getrennt für Deutschland-Ost, Deutschland-West und Österreich. Wir verwenden zur Altersbereinigung - anders als im vorigen Abschnitt - die Altersstruktur dieser Gebiet ohne weiter Differenzierung in Bundesländer.
 
@@ -1281,7 +1283,7 @@ Die größten Unterschiede zwischen den unbereinigten und altersbereinigten sind
 
 Das ist nicht weiter überraschend, in diesem Gebiet war die Zunahme des älteren Teils der Bevölkerung am ausgeprägtesten.
 
-### Wöchentliche Todesfälle gewichtet mit Altersverteilung Deutschland- West
+### Wöchentliche Sterbefälle gewichtet mit Altersverteilung Deutschland- West
 
 Um die Unterschiede der Altersstruktur in den untersuchten Gebieten herauszurechnen, führen wir noch einen weiteren Analyseschritt durch.
 
