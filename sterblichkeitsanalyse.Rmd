@@ -188,6 +188,8 @@ load(path(data_path,
 ```
 
 
+
+
 ```{r}
 pop_deaths_aut_ger_agegroup_weekly |>
     mutate(Jahr_neu = 
@@ -239,20 +241,24 @@ regions_ger <- c("Deutschland-Ost", "Deutschland-West")
 y_title <- "Verstorbene pro Mio Einwohner"
 ```
 
+
+
+<hr style="width:50%;height:3px;background-color:lightslategray;">
+
 ## Zusammenfassung
 
 *Es gibt derzeit verschiedene Publikationen (Webseiten und Zeitschriftenartikel), die errechnen, dass es in Deutschland 2020 keine in Vergleich zu den Vorjahren erhöhte Sterblichkeit gibt.*
 
-*Dieses Ergebnis erhält man, wenn man die Änderungen der Altersstruktur herausrechnet. Die Sterblichkeit ist bei Älteren natürlich höher als bei Jüngeren, und seit 2016 ist der Anteil der Älteren höher und der Anteil der Jüngeren niedriger geworden.*
+*Dieses Ergebnis erhält man, wenn man die Änderungen der Altersstruktur herausrechnet. Die Sterblichkeit ist bei Älteren natürlich höher als bei Jüngeren. Außerdem ist seit 2016 der Anteil der Älteren an der gesamten Bevölkerung höher und der Anteil der Jüngeren niedriger geworden. Diese demografische Veränderung alleine würde auch bei jeweils konstanter Sterberate in den einzelnen Altersgruppen zu einer höheren Gesamtsterblichkeit führen.*
 
-*Rechnet man die Sterblichkeit mit konstanter Altersstruktur von 2021, dann zeigt sich 2020 tatsächlich keine erhöhte Sterblichkeit.*
+*Deshalb berechnen wir auch die Sterblichkeit mit konstanter Altersstruktur von 2021, und dann zeigt sich 2020 tatsächlich keine erhöhte Sterblichkeit.*
 
 
 *Nimmt man allerdings auch die Daten des Kalenderjahrs 2021 dazu, dann sieht man, dass es von 2019 auf 2021 auch in den altersbereinigten Sterbefallzahlen sehr wohl einen Anstieg der Sterblichkeit gibt.*
 
 *Dahinter steckt ein Problem, das nicht sofort ins Auge springt: die bisher stärkste COVID-Welle war an der Jahreswende 2020-2021. Die Hälfte der Sterbefälle wird dem Jahr 2020 zugerechnet, die andere dem Jahr 2021. Rechnet man in Kalenderjahren und nur bis 2020, dann fließen die Hälfte der Sterbefälle nicht in die Berechnung ein.*
 
-*Rechnet man dagegen mit den Perioden, die jeweils ein halbes Jahr vor und nach der Jahreswende enthalten und somit immer ganze Saisonen von im Herbst und Winter auftretenden Infektionskrankheiten enthalten, dann zeigt sich sowohl in den altersbereinigten als auch den unbereinigten Sterbefallzahlen ein deutlicher Anstieg. Der Anstieg ist in Österreich ausgeprägter als in Deutschland.*
+*Um dieses Problem zu vermeiden rechnen wir mit Perioden, die jeweils ein halbes Jahr vor und nach der Jahreswende enthalten. Damit fassen wir ganze Herbst- und Wintersaisonen zusammen und berechnen die Sterblichkeit von Infektionswellen, die ihre Höhepunkte meist um die Jahreswende haben. Mit dieser Einteilung zeigt sich sowohl in den altersbereinigten als auch den unbereinigten Sterbefallzahlen ein deutlicher Anstieg. Der Anstieg ist in Österreich ausgeprägter als in Deutschland.*
 
 ## Untersuchungen mit Kalenderjahr-Gliederung
 
@@ -340,7 +346,7 @@ Dann haben wir wieder Jahresperioden von jeweils 52 Wochen.
 
 Zur Berechnung der Sterbefälle pro Million Einwohner verwenden wir die durchschnittliche Bevölkerungszahl der einzelnen Jahre.
 
-Mit dieser Modifikation betragen die jährlichen Sterbefallzahlen
+Mit dieser Modifikation betragen die jährlichen Sterbefallzahlen:
 
 ```{r}
 deaths_mio_aut_ger_yearly |>
@@ -393,8 +399,9 @@ c("Deutschland_0-65"="D",
 
 ```{r}
 complete_data_yearly |>
+  ungroup() |>
   filter(!(Gebiet %in% regions_ger)) |>
-  select(-Gebiet,-Tote,-pop) |>
+  select(-Gebiet,-Tote,-pop,-pop_start) |>
   arrange(Altersgruppe,Land) |>
   pivot_wider(
     names_from = c(Land,Altersgruppe),
@@ -489,7 +496,7 @@ complete_data_weekly |>
   cols_align(align="center",columns=2:9)  
 ```
 
-In beiden Länder sinkt der Anteil der Altersgruppe 0-65 um ungefähr 1 Prozentpunkt.
+In beiden Ländern sinkt der Anteil der Altersgruppe 0-65 um ungefähr 1 Prozentpunkt.
 Dieser Anteil ist in Österreich die ganze Zeit um ungefähr 3 Prozentpunkte höher als in Deutschland.
 Der Anteil der Gruppe 65-75 steigt in beiden Ländern um weniger als 1 Prozentpunkt, in Deutschland aber stärker als in Österreich.
 Der Anteil der Gruppe 75-85 steigt in Deutschland bis 2019 und sinkt dann wieder etwas, in Österreich steigt dieser Anteil stetig.
@@ -637,7 +644,7 @@ make_chart_html(
 Die Grafik lässt erkennen, dass die Altersbereinigung dazu führt, dass die Gesamtsterberate im früheren Zeitraum in Deutschland merkbar höher wird.
 In Österreich gibt es diesen Effekt auch, er ist aber geringer.
 
-Die altersbereinigte berechnete Zahl der Verstorbenen pro Million zeigt die folgende Tabelle.
+Die altersbereinigt berechnete Zahl der Verstorbenen pro Million zeigt die folgende Tabelle:
 
 ```{r}
 pop_deaths_weekly_mixed |>
@@ -682,7 +689,7 @@ make_chart_html(
 Die Altersbereinigung führt dazu, dass die bereinigte Sterberate 2020 in Deutschland sich nicht mehr sehr deutlich von den Jahren davor abhebt.
 Die Aussage, dass die altersbereinigte Sterblichkeit in Deutschland 2020 nicht höher war als in den Vorjahren, stimmt somit.
 
-Die altersbereinigte Sterblichkeit in Deutschland ist aber 2021 deutlich höher als in den Jahren davor.
+Aber im Jahr 2021 ist die altersbereinigte Sterblichkeit in Deutschland deutlich höher als in den Jahren davor.
 Die Grafik der wöchentlichen Sterbefälle pro Million Einwohner - die wir schon gesehen haben, in der aber jetzt noch die Jahresgrenzen markiert sind, zeigt auch warum:
 
 ```{r}
@@ -959,7 +966,7 @@ Wir sehen, dass die Altersbereinigung die Sterbefallzahlen in Österreich kaum �
 In Deutschland sind die altersbereinigten Sterbefallzahlen etwas höher als die unbereinigten.
 In der altersbereinigten Kurve sehen wir den Effekt der Grippewellen 2016-2017 und 2017-2018, in den beiden folgende Perioden, also von Juli 2018 bis Juni 2020, sind die Zahlen etwas niedriger.
 
-In beiden Ländern sehen wir aber einen deutlichen Anstieg der Sterbefallzahlen von der Periode 2019-2020 zu Periode 2020-2021.
+In beiden Ländern sehen wir aber einen deutlichen Anstieg der Sterbefallzahlen von der Periode 2019-2020 zu der Periode 2020-2021.
 
 
 ## Altersstruktur-Veränderung in den Bundesländern
@@ -1071,7 +1078,7 @@ data_in |>
 make_chart_html(chart)
 ```
 
-In Österreich ist die Zunahme der älteren Bevölkerungsgruppe im Burgenland und in Kärnten, Salzburg und Vorarlberg zu beobachten, allerdings nicht so stark ausgeprägt wie in den neuen Bundesländern in Deutschland.  
+In Österreich ist die Zunahme der älteren Bevölkerungsgruppe in Kärnten, Salzburg, Vorarlberg  und im Burgenland zu beobachten, allerdings nicht so stark ausgeprägt wie in den neuen Bundesländern in Deutschland.  
 
 
 ```{r}
@@ -1187,11 +1194,11 @@ deaths_mio_country |>
 ```
 
 
-Die Unterschiede zwischen den unbereinigten und den altersbereinigten Zahlen sind im wöchentlichen Verlauf bis 2019 merkbar. 
+Die Unterschiede zwischen den unbereinigten und den altersbereinigten Zahlen sind im wöchentlichen Verlauf bis 2019 deutlich erkennbar. 
 
 ### Jährliche bereinigte Sterbefallzahlen.
 
-Im folgenden verwenden wir als Einteilung der Zeit wieder die Perioden von Anfang Juli bis Ende Juni des Folgejahres, weil wir so ganze Infektionswellen immer in einer Periode einfangen.
+Im Folgenden verwenden wir als Einteilung der Zeit wieder die Perioden von Anfang Juli bis Ende Juni des Folgejahres, weil wir so ganze Infektionswellen immer in einer Periode einfangen.
 
 Berechnen wir die Sterblichkeit pro Periode mit dieser Gewichtung, dann ist der Effekt der Bereinigung klarer sichtbar. 
 
@@ -1232,16 +1239,16 @@ make_chart_html(
   chart
 )
 ```
-Bei den unbereinigten Sterbefallzahlen sehen wir in Deutschland bis 2019-2020 kaum Zu- oder Abnahmen, von 219-2020 bis 2020-2021 gibt es einen deutlichen Anstieg. Bei den bereinigten Zahlen sehen, dass die Werte 2016-2017 und 2017-2018 annähernd gleich hoch waren. Um die Jahreswende 2016-2017 und zu Beginn des Jahres 2018 gab es jeweils ein Grippewelle. In den beiden Perioden danach gab es keine so starken Infektionswellen, die Zahlen sind etwas niedriger. Um die Jahreswende 2020-2021 gab es dann die COVID-Welle, und das ist in den Kurven deutlich sichtbar. Die Altersbereinigung macht also deutlicher sichtbar, welche Auswirkungen die beiden Grippewellen hatten.
+Bei den unbereinigten Sterbefallzahlen sehen wir in Deutschland bis 2019-2020 kaum Zu- oder Abnahmen, von 219-2020 bis 2020-2021 gibt es einen deutlichen Anstieg. Bei den bereinigten Zahlen sehen, dass die Werte 2016-2017 und 2017-2018 annähernd gleich hoch waren. Um die Jahreswende 2016-2017 und zu Beginn des Jahres 2018 gab es jeweils eine Grippewelle. In den beiden Perioden danach gab es keine so starken Infektionswellen, die Zahlen sind etwas niedriger. Um die Jahreswende 2020-2021 gab es dann die COVID-Welle, und das ist in den Kurven deutlich sichtbar. Die Altersbereinigung macht also deutlicher sichtbar, welche Auswirkungen die beiden Grippewellen hatten.
 
-In Österreich ist der Unterschied zwischen unbereinigten und altersbereinigten Zahlen kaum merkbar. Wir sehen in beiden Kurven den deutlichen Anstieg durch die COVID-Wellen. Wir sehen auch, dass - anders als in Deutschland - die Grippewelle zum Jahresanfang 2018 weniger ausgeprägt war die um die Jahreswende 2016-2017.
+In Österreich ist der Unterschied zwischen unbereinigten und altersbereinigten Zahlen kaum merkbar. Wir sehen in beiden Kurven den deutlichen Anstieg durch die COVID-Wellen. Wir sehen auch, dass - anders als in Deutschland - die Grippewelle zum Jahresanfang 2018 weniger ausgeprägt war als die um die Jahreswende 2016-2017.
 
 
-## Sterbesallzahlen trend- und gebietsweise bereinigt
+## Sterbefallzahlen trend- und gebietsweise bereinigt
 
 ### Wöchentliche Sterbefallzahlen gebietsweise trendbereinigt
 
-Im Folgenden berechnen wir unbereinigte und altersbereinigte Sterbefallzahlen getrennt für Deutschland-Ost, Deutschland-West und Österreich. Wir verwenden zur Altersbereinigung - anders als im vorigen Abschnitt - die Altersstruktur dieser Gebiet ohne weiter Differenzierung in Bundesländer.
+Im Folgenden berechnen wir unbereinigte und altersbereinigte Sterbefallzahlen getrennt für Deutschland-Ost, Deutschland-West und Österreich. Wir verwenden zur Altersbereinigung - anders als im vorigen Abschnitt - die Altersstruktur dieser Gebiete ohne weitere Differenzierung in Bundesländer.
 
 
 ```{r}
@@ -1280,7 +1287,7 @@ Die größten Unterschiede zwischen den unbereinigten und altersbereinigten sind
 
 Das ist nicht weiter überraschend, in diesem Gebiet war die Zunahme des älteren Teils der Bevölkerung am ausgeprägtesten.
 
-### Wöchentliche Sterbefälle gewichtet mit Altersverteilung Deutschland- West
+### Wöchentliche Sterbefälle gewichtet mit Altersverteilung Deutschland-West
 
 Um die Unterschiede der Altersstruktur in den untersuchten Gebieten herauszurechnen, führen wir noch einen weiteren Analyseschritt durch.
 
@@ -1337,7 +1344,7 @@ deaths_mio_gebiet |>
 ```
 
 Diese Grafik ist etwas überladen. Wir sehen aber auf jeden Fall,
-das die Verwendung einheitlicher Zahlen in Deutschland West zu niedrigeren und in Österreich zu höheren Zahlen führt.
+dass die Verwendung einheitlicher Zahlen in Deutschland West zu niedrigeren und in Österreich zu höheren Zahlen führt.
 
 Da Deutschland-Ost den höchsten und Österreich den niedrigsten Anteil
 Älterer hat und die Sterblichkeit bei den Älteren höher ist als bei den Jüngeren, ist diese Verschiebung nicht weiter überraschend.
@@ -1360,7 +1367,7 @@ deaths_mio_gebiet |>
   theme_minimal()  
 ```
 
-Wir erkennen, dass auch nach Umlegung der Sterbefallzahlen auf eine gemeinsame Altersstruktur Deutschland-Ost immer noch die höchste und Österreich die niedrigste hat. Diese Unterschiede sind bei COVID deutlicher ausgeprägt als bei den früheren Grippewellen.
+Wir erkennen, dass auch nach Umlegung der Sterbefallzahlen auf eine gemeinsame Altersstruktur Deutschland-Ost immer noch die höchste und Österreich die niedrigste Sterblichkeit hat. Diese Unterschiede sind bei COVID deutlicher ausgeprägt als bei den früheren Grippewellen.
 
 
 
@@ -1438,8 +1445,10 @@ make_chart_html(
 In dieser Grafik sehen wir den Effekt der Standardisierung der Altersstruktur besonders deutlich. Die Kurve für Deutschland-West wird deutlich nach unten verschoben, und das ist im späteren Verlauf noch deutlicher ausgeprägt als zu Beginn.
 Die Kurve für Österreich wird etwas weniger nach oben verschoben.
 
-Mit diesen Zahlen können wir sagen, dass nach Konsolidierung der Altersgewichtung sowohl nach demografischen Unterschieden als auch durch Herausrechnen der zeitlichen Veränderungen in Deutschland-Ost höhere und Österreich niedrigere Sterblichkeit als in Deutschland-West
+Mit diesen Zahlen können wir sagen, dass nach Konsolidierung der Altersgewichtung sowohl nach demografischen Unterschieden als auch durch Herausrechnen der zeitlichen Veränderungen in Deutschland-Ost höhere und in Österreich niedrigere Sterblichkeit als in Deutschland-West
 zu beobachten ist. 
 
-Die Auswirkungen der COVID-Welle sind (wenn man mit der Periode davor vergleicht) in Deutschland-West aber definitiv niedriger als in Deutschland Ost und in Österreich.
+Die Auswirkungen der COVID-Welle sind in Deutschland-West also definitiv geringer als in Deutschland-Ost und in Österreich.
+
+
 
