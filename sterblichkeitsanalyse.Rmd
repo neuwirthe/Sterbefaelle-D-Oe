@@ -1141,9 +1141,6 @@ pop_bl_agegroup_2020 |>
   ungroup() |>
   rename(pop_2020=pop) ->
   weights_bl
-weights_bl
-
-#weights_country
 ```
 
 
