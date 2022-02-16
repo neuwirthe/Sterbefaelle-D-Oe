@@ -34,6 +34,7 @@ suppressPackageStartupMessages({
   library(RColorBrewer)
   library(readxl)
   library(curl)
+  library(writexl)
 }
 )
 ```
@@ -75,8 +76,8 @@ zu finden bei https://data.statistik.gv.at/web/catalog.jsp#collapse7
 #### Download
 
 ```{r}
-2002:2021 |>
   map(
+2002:2021 |>
   \(i)suppressMessages(
     read_csv2(
       paste0(
@@ -578,5 +579,18 @@ pop_aut_bl_age1_gender_yearly |>
 save(pop_aut_ger_bl_age1_yearly,
      file=path(raw_data_path,
                "pop_aut_ger_bl_age1_yearly.RData"))
+```
+
+```{r}
+load(
+  path(raw_data_path,
+  "pop_deaths_aut_ger_agegroup_weekly.RData"))
+```
+
+```{r}
+write_xlsx(pop_aut_ger_bl_age1_yearly,
+           path=
+               path(raw_data_path,
+                    "pop_deaths_aut_ger_agegroup_weekl.xlsx"))
 ```
 
