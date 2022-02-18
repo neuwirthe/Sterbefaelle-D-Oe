@@ -76,12 +76,12 @@ zu finden bei https://data.statistik.gv.at/web/catalog.jsp#collapse7
 #### Download
 
 ```{r}
-  map(
-2002:2021 |>
+map(
+2002:2021 ,
   \(i)suppressMessages(
     read_csv2(
       paste0(
-      "https://data.statistik.gv.at/data/OGD_bevstandjbab2002_BevStand_",
+  "https://data.statistik.gv.at/data/OGD_bevstandjbab2002_BevStand_",
       i,
       ".csv")))
   ) |> 
@@ -580,6 +580,10 @@ save(pop_aut_ger_bl_age1_yearly,
      file=path(raw_data_path,
                "pop_aut_ger_bl_age1_yearly.RData"))
 ```
+
+
+
+
 
 ```{r}
 load(

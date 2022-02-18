@@ -33,6 +33,7 @@ suppressPackageStartupMessages({
   library(gt)
   library(ggmosaic)
   library(lubridate)
+  library(RColorBrewer)
 }
 )
 ```
@@ -610,7 +611,7 @@ make_chart_html(
 Ein Vergleich mit den nicht altersbereinigten Daten sieht so aus:
 
 ```{r}
-pal_typ <- c(altersbereingt="solid",unbereinigt="dotted")
+pal_typ <- c(altersbereinigt="solid",unbereinigt="dotted")
 complete_data_weekly |>
   filter(!(Gebiet %in% regions_ger)) |>
   select(-Gebiet) |>
@@ -1449,6 +1450,5 @@ Mit diesen Zahlen können wir sagen, dass nach Konsolidierung der Altersgewichtu
 zu beobachten ist. 
 
 Die Auswirkungen der COVID-Welle sind in Deutschland-West also definitiv geringer als in Deutschland-Ost und in Österreich.
-
 
 
